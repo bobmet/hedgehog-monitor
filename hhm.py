@@ -18,6 +18,8 @@ from results_writer import ResultsWriter
 import logging
 import math
 
+
+__version__ = "0.1"
 logging.basicConfig(format=('%(asctime)s - %(name)s - %(levelname)s - %(message)s'),
                     level=logging.INFO)
 logger = logging.getLogger('hh')
@@ -192,7 +194,7 @@ class MainLoop:
 
 
 
-logger.info("Starting Hedgehog Monitor")
+logger.info("Starting Hedgehog Monitor {0}".format(__version__))
 mainloop = MainLoop()
 mainloop.startup()
 
