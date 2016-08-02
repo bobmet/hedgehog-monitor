@@ -4,6 +4,8 @@ import os
 class ResultsWriter(csv.DictWriter):
     def __init__(self, filename, fieldnames, fp=None):
 
+        append = False
+
         if filename is not None:
             if os.path.exists(filename):
                 append = True
