@@ -19,7 +19,7 @@ import logging
 import math
 
 
-__version__ = "0.2"
+__version__ = "0.3.01"
 
 logging.basicConfig(format=('%(asctime)s - %(name)s - %(levelname)s - %(message)s'),
                     level=logging.INFO)
@@ -97,6 +97,7 @@ class LuxThread(DataAcquisitionThread):
                 'datetime': datetime.datetime.now() }
         return data
 
+
 class WheelCounterThread(threading.Thread):
     def __init__(self, sensor_pin, led_pin, callback, run_event):
         threading.Thread.__init__(self)
@@ -113,129 +114,111 @@ class WheelCounterThread(threading.Thread):
 
         :return:
         """
-        detect_count = 0
-        led_state = 0
         last_time = None
         diameter = 13
-        current_distance = 0
-        current_elapsed_time = 0
-        daily_distance = 0
         circumference = diameter * math.pi * 0.0000157828283
-        timeout_delay = 10
-        timer_count = 0
-
         period_counter = 0
         total_period = 10 * 1000
         timeout_value = 100 # milliseconds
-        detection_active = False
+        active = False
+        led_on = False
+        period_detection_count = 0
+        period_distance = 0
+        period_elapsed = 0
 
-        # --------------------------------------------------------------------
-        # Loop until we clear the run_event, which means the program is exiting
-        # ---------------------------------------------------------------------
+        # Loop while the run event is still set.  It'll typically be cleared on a Keyboard interrupt
         while self.run_event.is_set():
 
-            # ----------------------------------------------------
-            # Check the input.
-            # ----------------------------------------------------
+            # Wait for a change on the sensor. We'll timeout every 100 ms
             GPIO.wait_for_edge(self.sensor_pin, GPIO.BOTH, timeout=100)
-            active = GPIO.input(self.sensor_pin)
 
-            if active == 0:
-                # ----------------------------------------------------
-                # Increment the number of times a field was detected
-                # ----------------------------------------------------
-                if detection_active is False:
-                    detect_count += 1
+            # Read the current input from the pin
+            input_state = GPIO.input(self.sensor_pin)
 
-                    # ----------------------------------------------------
-                    # Save the current time
-                    # ----------------------------------------------------
-                    this_time = datetime.datetime.now()
+            # Save the current time - we'll use that to calculate the speed
+            this_time = datetime.datetime.now()
 
-                    logger.info("Active, count: {0} time: {1}".format(detect_count, this_time))
+            # If the input state is 0, then there is a magnetic field on the Hall sensor
+            if input_state == 0:
 
-                    # ----------------------------------------------------
-                    # Turn on the LED
-                    # ----------------------------------------------------
-                    led_state = 1
+                # See if we've already detected an active state.  If so, nothing to do.
+                if active is False:
+                    active = True
+
+                    # Turn on the LED to indicate that we have a detection
                     GPIO.output(self.led_pin, 1)
+                    led_on = True
 
-                    detection_active = True
+                    # Increment the number of detections
+                    period_detection_count += 1
 
+                    # Add to the distance
+                    period_distance += circumference
+
+                    # We're going to calculate the speed - for that, we need to know the elapsed time since the
+                    # last detection
                     if last_time is not None:
-                        time_diff = (this_time - last_time).total_seconds()
+                        # Get the time from the last detection to now
+                        elapsed = (this_time - last_time).total_seconds()
+                        period_elapsed += elapsed
 
-                        if time_diff > 5:
-                            speed = 0
-                            logger.info("---------Time Out, {0} - {1}, {2}".format(this_time, last_time, time_diff))
-                            last_time = None
-                        else:
-                            speed = circumference / (time_diff/3600)
-                            current_distance += circumference
-                            current_elapsed_time += time_diff
+                        # Calculate the current speed
+                        current_speed = circumference / (elapsed / 3600)
+#                        logger.info("Elapsed: {0}, count: {1}, speed: {2}".format(elapsed, period_detection_count, current_speed))
                     last_time = this_time
             else:
-                detection_active = False
-                if led_state == 1:
+                # No detection - the magnet has moved away from the sensor
+                active = False
+
+                # Shut the LED off - if it was on.  We do the check here so we don't keep sending unecessary 'off'
+                # commands to the LED pin
+                if led_on is True:
                     GPIO.output(self.led_pin, 0)
-                    led_state = 0
+                    led_on = False
+
+            # This is a check to see if the wheel has stopped moving for a time out period (e.g. 5 seconds).
+            if last_time is not None and (this_time - last_time).total_seconds() > 5:
+                logger.info("-------- Inactive for 5 seconds")
+                last_time = None
 
             period_counter += timeout_value
-            if period_counter >= total_period:
-                if current_elapsed_time > 0:
-                    avg_speed = current_distance / (current_elapsed_time / 3600)
+
+            # See if we've exceeded the period, e.g. 60 seconds
+            if period_counter > total_period:
+                # Calculate the distance covered during this time period, as well as the average speed
+                distance = period_detection_count * circumference
+                if period_elapsed > 0:
+                    avg_speed = distance / (period_elapsed / 3600)
                 else:
                     avg_speed = 0
 
-                logger.info("Timeout, count: {0}, speed: {1}, distance = {2} "
-                            "elapsed: {3}, avg-speed: {4}".format(detect_count, speed, current_distance,
-                                                                  current_elapsed_time, avg_speed))
-                period_counter = 0
-                detect_count = 0
-                speed = 0
-                current_distance = 0
-                current_elapsed_time = 0
+                wheel_active = True if period_detection_count > 0 else False
 
-#         while self.run_event.is_set():
-#             timer_count += timeout_delay
-#             logger.info(timer_count)
-#             if timer_count >= 10.0:
-#                 logger.info("10 seconds")
-#                 timer_count = 0
-#
-#             GPIO.wait_for_edge(self.sensor_pin, GPIO.BOTH, timeout=10000)
-#             active = GPIO.input(self.sensor_pin)
-#             if active == 0:
-#                 led_state = 1
-#                 detect_count += 1
-#                 this_time = datetime.datetime.now()
-#                 if last_time is not None:
-#                     time_diff = (this_time - last_time).total_seconds()
-#                     if time_diff > 5:
-#                         speed = 0
-#                         logger.info("Time Out")
-#                     else:
-#                         speed = circumference / (time_diff/3600)
-#                         distance_total += circumference
-#                     data = { 'revolutions': detect_count,
-#                              'speed': speed,
-#                              'distance': distance_total}
-#                     self.callback(data)
-# #                    logger.info("Detect count: {0}, time_diff = {1}, speed = {2}, distance = {3}".format(detect_count, time_diff, speed, distance_total))
-#                 last_time = this_time
-#             else:
-#
-#                 led_state = 0
-#
-#             GPIO.output(self.led_pin, led_state)
+                # Report back
+                data = {'datetime': datetime.datetime.now(),
+                        'revolutions': period_detection_count,
+                        'distance': distance,
+                        'avg_speed': avg_speed,
+                        'moving_time': period_elapsed,
+                        'active': wheel_active}
+                self.callback(data)
+#                logger.info("LOOP PERIOD COMPLETE, revs: {0}, distance: {1}, "
+#                            "avg speed: {2}, elapsed: {3}".format(period_detection_count, distance, avg_speed,period_elapsed))
+                period_counter = 0
+                period_detection_count = 0
+                period_elapsed = 0
 
 
 class MainLoop:
     def __init__(self):
         self.gpio_setup()
         self.run_event = threading.Event()
-        self.wx_file = ResultsWriter(filename='temperature.csv', fieldnames=['datetime', 'temp_c', 'temp_f', 'humidity'])
+        self.wx_file = ResultsWriter(filename='temperature.csv',
+                                     fieldnames=['datetime', 'temp_c', 'temp_f', 'humidity'])
         self.lux_file = ResultsWriter(filename='lux.csv', fieldnames=['datetime', 'lux'])
+        self.wheel_file = ResultsWriter(filename='wheel.csv',
+                                        fieldnames=['datetime', 'distance', 'moving_time', 'revolutions',
+                                                    'avg_speed', 'active'])
         return
 
     def handle_wx_data(self, data):
@@ -245,6 +228,10 @@ class MainLoop:
     def handle_data(self, data):
         logger.info(data)
         self.lux_file.writerow(data)
+
+    def handle_wheel_data(self, data):
+        logger.info(data)
+        self.wheel_file.writerow(data)
 
     def gpio_setup(self):
         GPIO.setmode(GPIO.BCM)
@@ -264,7 +251,7 @@ class MainLoop:
 
         thread_temp = TemperatureThread(60, self.handle_wx_data, dht, self.run_event)
         thread_lux = LuxThread(60, self.handle_data, tsl, self.run_event)
-        thread_wheel = WheelCounterThread(18, 21, self.handle_data, self.run_event)
+        thread_wheel = WheelCounterThread(18, 21, self.handle_wheel_data, self.run_event)
 
         thread_temp.start()
         thread_lux.start()
