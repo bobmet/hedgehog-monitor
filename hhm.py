@@ -6,22 +6,22 @@ Created on Thu Jul 14 23:20:03 2016
 """
 
 import datetime
+import logging
+import math
+import threading
 import time
 import timeit
 
 import RPi.GPIO as GPIO
 
-import threading
 import dht22
-import tls_sensor
+import tsl_sensor
+import Queue
 from results_writer import ResultsWriter
-import logging
-import math
 
+__version__ = "0.3.02"
 
-__version__ = "0.3.01"
-
-logging.basicConfig(format=('%(asctime)s - %(name)s - %(levelname)s - %(message)s'),
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     level=logging.INFO)
 logger = logging.getLogger('hh')
 
@@ -41,7 +41,7 @@ class DataAcquisitionThread(threading.Thread):
     Class to handle acquiring data from a sensor.  It's a subclass of the main threading.Thread class
     to handle getting the data in a separate thread.
     """
-    def __init__(self, loop_delay, callback, sensor_module, run_event):
+    def __init__(self, loop_delay, callback, sensor_module, run_event, queue=None):
 
         threading.Thread.__init__(self)
 
@@ -49,6 +49,7 @@ class DataAcquisitionThread(threading.Thread):
         self.callback = callback
         self.sensor_module = sensor_module
         self.run_event = run_event
+        self.queue = queue
 
     def run(self):
         time_counter = 0.0
@@ -75,7 +76,8 @@ class DataAcquisitionThread(threading.Thread):
         return None
 
     def report(self, data_points):
-        self.callback(data_points)
+        self.queue.put(data_points)
+#        self.callback(data_points)
 
 
 class TemperatureThread(DataAcquisitionThread):
@@ -94,18 +96,19 @@ class LuxThread(DataAcquisitionThread):
     def get_data(self):
         lux = self.sensor_module.get_data()
         data = {'lux': lux,
-                'datetime': datetime.datetime.now() }
+                'datetime': datetime.datetime.now()}
         return data
 
 
 class WheelCounterThread(threading.Thread):
-    def __init__(self, sensor_pin, led_pin, callback, run_event):
+    def __init__(self, sensor_pin, led_pin, callback, run_event, queue):
         threading.Thread.__init__(self)
 
         self.sensor_pin = sensor_pin
         self.led_pin = led_pin
         self.run_event = run_event
         self.callback = callback
+        self.queue = queue
         GPIO.setup(self.sensor_pin, GPIO.IN)
         GPIO.setup(self.led_pin, GPIO.OUT)
 
@@ -119,7 +122,7 @@ class WheelCounterThread(threading.Thread):
         circumference = diameter * math.pi * 0.0000157828283
         period_counter = 0
         total_period = 10 * 1000
-        timeout_value = 100 # milliseconds
+        timeout_value = 100  # milliseconds
         active = False
         led_on = False
         period_detection_count = 0
@@ -162,9 +165,6 @@ class WheelCounterThread(threading.Thread):
                         elapsed = (this_time - last_time).total_seconds()
                         period_elapsed += elapsed
 
-                        # Calculate the current speed
-                        current_speed = circumference / (elapsed / 3600)
-#                        logger.info("Elapsed: {0}, count: {1}, speed: {2}".format(elapsed, period_detection_count, current_speed))
                     last_time = this_time
             else:
                 # No detection - the magnet has moved away from the sensor
@@ -201,9 +201,8 @@ class WheelCounterThread(threading.Thread):
                         'avg_speed': avg_speed,
                         'moving_time': period_elapsed,
                         'active': wheel_active}
-                self.callback(data)
-#                logger.info("LOOP PERIOD COMPLETE, revs: {0}, distance: {1}, "
-#                            "avg speed: {2}, elapsed: {3}".format(period_detection_count, distance, avg_speed,period_elapsed))
+#                self.callback(data)
+                self.queue.put(data)
                 period_counter = 0
                 period_detection_count = 0
                 period_elapsed = 0
@@ -213,6 +212,7 @@ class MainLoop:
     def __init__(self):
         self.gpio_setup()
         self.run_event = threading.Event()
+        self.queue = Queue.Queue()
         self.wx_file = ResultsWriter(filename='temperature.csv',
                                      fieldnames=['datetime', 'temp_c', 'temp_f', 'humidity'])
         self.lux_file = ResultsWriter(filename='lux.csv', fieldnames=['datetime', 'lux'])
@@ -247,11 +247,11 @@ class MainLoop:
         dht_data_pin = 4
         GPIO.setup(dht_led_pin, GPIO.OUT)
         dht = dht22.DHT22(data_gpio_pin=dht_data_pin, led_gpio_pin=dht_led_pin)
-        tsl = tls_sensor.TSLSensor()
+        tsl = tsl_sensor.TSLSensor()
 
-        thread_temp = TemperatureThread(60, self.handle_wx_data, dht, self.run_event)
-        thread_lux = LuxThread(60, self.handle_data, tsl, self.run_event)
-        thread_wheel = WheelCounterThread(18, 21, self.handle_wheel_data, self.run_event)
+        thread_temp = TemperatureThread(10, self.handle_wx_data, dht, self.run_event, self.queue)
+        thread_lux = LuxThread(60, self.handle_data, tsl, self.run_event, self.queue)
+        thread_wheel = WheelCounterThread(18, 21, self.handle_wheel_data, self.run_event, self.queue)
 
         thread_temp.start()
         thread_lux.start()
@@ -259,21 +259,24 @@ class MainLoop:
 
         while True:
             try:
-                time.sleep(0.01)
+                # Wait for something on the queue, but only for a short time (1 ms). This will allow some
+                # responsiveness on the loop (e.g. for CTRL+C shutdown) and will also act as the loop
+                # delay since we're basically in a busy-wait loop
+                data = self.queue.get(True, 0.001)
+                logger.info("{0}: {1}".format(threading.currentThread().name, data))
+#                time.sleep(0.01)
             except KeyboardInterrupt:
-                print "Keyboard Stop"
+                logger.info("Keyboard Stop")
                 self.run_event.clear()
                 thread_temp.join()
                 thread_lux.join()
                 thread_wheel.join()
                 GPIO.cleanup()
+                logger.info("Threads shutdown")
                 break
-
-
-
+            except Queue.Empty:
+                # The queue.get with a timeout throws a Queue.Empty exception. Just continue if that happens
+                continue
 logger.info("Starting Hedgehog Monitor {0}".format(__version__))
 mainloop = MainLoop()
 mainloop.startup()
-
-
-        
