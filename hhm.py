@@ -5,21 +5,24 @@ Created on Thu Jul 14 23:20:03 2016
 @author: pi
 """
 
+import Queue
 import datetime
 import logging
 import math
 import threading
-import time
-import timeit
 
 import RPi.GPIO as GPIO
 
 import dht22
+import sensor_handlers
 import tsl_sensor
-import Queue
+from lcd_display import LCDDisplay
 from results_writer import ResultsWriter
+from sensor_handlers.button_handler import ButtonHandlerThread
+from sensor_handlers.data_collection_thread import DataCollectionThread
+from sensor_handlers.lcd_handler import LCDDisplayThread
 
-__version__ = "0.3.02"
+__version__ = "0.0.9"
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     level=logging.INFO)
@@ -36,55 +39,13 @@ METRIC_UNITS = False
 # ---------------------------------
 
 
-class DataAcquisitionThread(threading.Thread):
-    """
-    Class to handle acquiring data from a sensor.  It's a subclass of the main threading.Thread class
-    to handle getting the data in a separate thread.
-    """
-    def __init__(self, loop_delay, callback, sensor_module, run_event, queue=None):
 
-        threading.Thread.__init__(self)
-
-        self.loop_delay = loop_delay
-        self.callback = callback
-        self.sensor_module = sensor_module
-        self.run_event = run_event
-        self.queue = queue
-
-    def run(self):
-        time_counter = 0.0
-        self.report(self.get_data())
-
-        # This will loop while the keep running event is set.  If it gets cleared (external to the thread, e.g.
-        # from a KeyboardInterrupt in the calling thread, then the loop will exit and the thread will close.
-
-        while self.run_event.is_set():
-            if time_counter >= self.loop_delay:
-
-                start_time = timeit.default_timer()
-                data = self.get_data()
-                stop_time = timeit.default_timer()
-                elapsed = stop_time - start_time
-                self.report(data)
-                time_counter = elapsed
-            time.sleep(0.1)
-            time_counter += 0.1
-
-        logger.info("Thread {0} closing".format(threading.currentThread().getName()))
-
-    def get_data(self):
-        return None
-
-    def report(self, data_points):
-        self.queue.put(data_points)
-#        self.callback(data_points)
-
-
-class TemperatureThread(DataAcquisitionThread):
+class TemperatureThread(DataCollectionThread):
     def get_data(self):
         humidity, temp = self.sensor_module.get_data()
 
-        data = {'temp_c': round(float(temp), 2),
+        data = {'data_type': 'temperature',
+                'temp_c': round(float(temp), 2),
                 'temp_f': round(float(temp) * 1.8 + 32, 2),
                 'humidity': round(float(humidity), 2),
                 'datetime': datetime.datetime.now()}
@@ -92,10 +53,11 @@ class TemperatureThread(DataAcquisitionThread):
         return data
 
 
-class LuxThread(DataAcquisitionThread):
+class LuxThread(DataCollectionThread):
     def get_data(self):
         lux = self.sensor_module.get_data()
-        data = {'lux': lux,
+        data = {'data_type': 'light',
+                'lux': lux,
                 'datetime': datetime.datetime.now()}
         return data
 
@@ -213,12 +175,18 @@ class MainLoop:
         self.gpio_setup()
         self.run_event = threading.Event()
         self.queue = Queue.Queue()
+        self.lcd_queue = Queue.Queue()
+        self.lcd = LCDDisplay()
+
         self.wx_file = ResultsWriter(filename='temperature.csv',
                                      fieldnames=['datetime', 'temp_c', 'temp_f', 'humidity'])
         self.lux_file = ResultsWriter(filename='lux.csv', fieldnames=['datetime', 'lux'])
         self.wheel_file = ResultsWriter(filename='wheel.csv',
                                         fieldnames=['datetime', 'distance', 'moving_time', 'revolutions',
                                                     'avg_speed', 'active'])
+
+        # TODO
+        self.lcd_message = None
         return
 
     def handle_wx_data(self, data):
@@ -249,13 +217,16 @@ class MainLoop:
         dht = dht22.DHT22(data_gpio_pin=dht_data_pin, led_gpio_pin=dht_led_pin)
         tsl = tsl_sensor.TSLSensor()
 
-        thread_temp = TemperatureThread(10, self.handle_wx_data, dht, self.run_event, self.queue)
+        thread_temp = TemperatureThread(30, self.handle_wx_data, dht, self.run_event, self.queue)
         thread_lux = LuxThread(60, self.handle_data, tsl, self.run_event, self.queue)
         thread_wheel = WheelCounterThread(18, 21, self.handle_wheel_data, self.run_event, self.queue)
-
+        thread_lcd = LCDDisplayThread(self.run_event, self.lcd_queue, self.lcd)
+        thread_button = ButtonHandlerThread(6, self.run_event, self.queue)
         thread_temp.start()
         thread_lux.start()
         thread_wheel.start()
+        thread_lcd.start()
+        thread_button.start()
 
         while True:
             try:
@@ -264,7 +235,9 @@ class MainLoop:
                 # delay since we're basically in a busy-wait loop
                 data = self.queue.get(True, 0.001)
                 logger.info("{0}: {1}".format(threading.currentThread().name, data))
-#                time.sleep(0.01)
+
+                self.lcd_queue.put(data)
+
             except KeyboardInterrupt:
                 logger.info("Keyboard Stop")
                 self.run_event.clear()
@@ -272,11 +245,19 @@ class MainLoop:
                 thread_lux.join()
                 thread_wheel.join()
                 GPIO.cleanup()
+
+                # Cleanup the LCD
+                self.lcd.set_backlight(1)
+                self.lcd.clear()
                 logger.info("Threads shutdown")
                 break
             except Queue.Empty:
                 # The queue.get with a timeout throws a Queue.Empty exception. Just continue if that happens
                 continue
-logger.info("Starting Hedgehog Monitor {0}".format(__version__))
+            except Exception, ex:
+                logger.error("{0} exception caught".format(ex))
+                continue
+
+logger.info("Starting Hedgehog Monitor {0}, sensor_handler: v{1}".format(__version__, sensor_handlers.__version__))
 mainloop = MainLoop()
 mainloop.startup()
