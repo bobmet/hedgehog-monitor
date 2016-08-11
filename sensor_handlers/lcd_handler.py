@@ -3,6 +3,9 @@ import Queue
 import logging
 import datetime
 
+
+__version__ = "0.0.5"
+
 logger = logging.getLogger('hh')
 
 
@@ -46,7 +49,7 @@ class DataReportingThread(threading.Thread):
 
                 # If we're showing the clock, update it
                 if self.current_message_num == 3:
-                    current_time = datetime.datetime.now().strftime("%H:%M:%S")
+                    current_time = datetime.datetime.now().strftime("%H:%M")
                     if current_time != last_datetime:
                         self.update_time()
                         last_datetime = current_time
@@ -68,7 +71,6 @@ class DataReportingThread(threading.Thread):
                         timeout_counter = 0
 
                     logger.info("LCD THREAD:  {0}".format(self.sensor_data))
-#                    self.update_lcd()
 
             except Queue.Empty:
                 # The queue.get with a timeout throws a Queue.Empty exception. Just continue if that happens
@@ -106,14 +108,12 @@ class DataReportingThread(threading.Thread):
 
             self.current_message_num += 1
             if self.current_message_num > 3:
-                self.current_message_num  = 0
+                self.current_message_num = 0
 
-#        logger.info(message)
 
     def update_time(self):
         time_now = datetime.datetime.now()
-        display_time = time_now.strftime("%a %m/%d/%Y\n%I:%M:%S %p")
-        logger.info(display_time)
+        display_time = time_now.strftime("%a %m/%d/%Y\n%I:%M %p")
         message = display_time
         self.lcd.clear()
         self.lcd.message(message)
