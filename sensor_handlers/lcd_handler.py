@@ -1,6 +1,7 @@
 import threading
 import Queue
 import logging
+import datetime
 
 logger = logging.getLogger('hh')
 
@@ -32,7 +33,7 @@ class DataReportingThread(threading.Thread):
 
     def run(self):
         timeout_counter = 0
-
+        last_datetime = None
         while self.run_event.is_set():
             try:
                 timeout_counter += self.loop_sleep
@@ -42,6 +43,13 @@ class DataReportingThread(threading.Thread):
                         self.lcd.set_backlight(1)
                         self.backlight_status = False
                     timeout_counter = 0
+
+                # If we're showing the clock, update it
+                if self.current_message_num == 3:
+                    current_time = datetime.datetime.now().strftime("%H:%M:%S")
+                    if current_time != last_datetime:
+                        self.update_time()
+                        last_datetime = current_time
 
                 data = self.queue.get(True, self.loop_sleep)
 
@@ -87,16 +95,25 @@ class DataReportingThread(threading.Thread):
                                                            self.sensor_data['humidity'],
                                                            self.sensor_data['lux'])
             elif self.current_message_num == 2:
-                message = "Message #3"
+                self.update_time()
 
             elif self.current_message_num == 3:
                 message = "Message #4 ABCD\nS'more monitor"
 
-            self.lcd.clear()
-            self.lcd.message(message)
+            if self.current_message_num != 2:
+                self.lcd.clear()
+                self.lcd.message(message)
 
             self.current_message_num += 1
             if self.current_message_num > 3:
                 self.current_message_num  = 0
 
 #        logger.info(message)
+
+    def update_time(self):
+        time_now = datetime.datetime.now()
+        display_time = time_now.strftime("%a %m/%d/%Y\n%I:%M:%S %p")
+        logger.info(display_time)
+        message = display_time
+        self.lcd.clear()
+        self.lcd.message(message)
