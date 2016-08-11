@@ -158,13 +158,14 @@ class WheelCounterThread(threading.Thread):
                 wheel_active = True if period_detection_count > 0 else False
 
                 # Report back
-                data = {'datetime': datetime.datetime.now(),
+                data = {'data_type': 'wheel',
+                        'datetime': datetime.datetime.now(),
                         'revolutions': period_detection_count,
                         'distance': distance,
                         'avg_speed': avg_speed,
                         'moving_time': period_elapsed,
                         'active': wheel_active}
-#                self.callback(data)
+
                 self.queue.put(data)
                 period_counter = 0
                 period_detection_count = 0
@@ -179,6 +180,7 @@ class MainLoop:
         self.lcd_queue = Queue.Queue()
         self.lcd = LCDDisplay()
 
+        self.version_msg = "S'more Monitor\nv{0}".format(__version__)
         self.wx_file = ResultsWriter(filename='temperature.csv',
                                      fieldnames=['datetime', 'temp_c', 'temp_f', 'humidity'])
         self.lux_file = ResultsWriter(filename='lux.csv', fieldnames=['datetime', 'lux'])
@@ -186,8 +188,6 @@ class MainLoop:
                                         fieldnames=['datetime', 'distance', 'moving_time', 'revolutions',
                                                     'avg_speed', 'active'])
 
-        # TODO
-        self.lcd_message = None
         return
 
     def handle_wx_data(self, data):
@@ -221,9 +221,8 @@ class MainLoop:
         thread_temp = TemperatureThread(30, self.handle_wx_data, dht, self.run_event, self.queue)
         thread_lux = LuxThread(60, self.handle_data, tsl, self.run_event, self.queue)
         thread_wheel = WheelCounterThread(18, 21, self.handle_wheel_data, self.run_event, self.queue)
-        thread_lcd = DataReportingThread(self.run_event, self.lcd_queue, self.lcd)
+        thread_lcd = DataReportingThread(self.run_event, self.lcd_queue, self.lcd, self.version_msg)
         thread_button = ButtonHandlerThread(6, self.run_event, self.queue)
-
 
         thread_lcd.start()
         thread_temp.start()
@@ -237,7 +236,7 @@ class MainLoop:
                 # responsiveness on the loop (e.g. for CTRL+C shutdown) and will also act as the loop
                 # delay since we're basically in a busy-wait loop
                 data = self.queue.get(True, 0.001)
-                logger.info("{0}: {1}".format(threading.currentThread().name, data))
+#                logger.info("{0}: {1}".format(threading.currentThread().name, data))
 
                 self.lcd_queue.put(data)
 
