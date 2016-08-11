@@ -10,7 +10,7 @@ import datetime
 import logging
 import math
 import threading
-
+import time
 import RPi.GPIO as GPIO
 
 import dht22
@@ -20,9 +20,10 @@ from lcd_display import LCDDisplay
 from results_writer import ResultsWriter
 from sensor_handlers.button_handler import ButtonHandlerThread
 from sensor_handlers.data_collection_thread import DataCollectionThread
-from sensor_handlers.lcd_handler import LCDDisplayThread
+from sensor_handlers.lcd_handler import DataReportingThread
 
-__version__ = "0.0.9"
+__version__ = "0.0.10"
+
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     level=logging.INFO)
@@ -220,12 +221,14 @@ class MainLoop:
         thread_temp = TemperatureThread(30, self.handle_wx_data, dht, self.run_event, self.queue)
         thread_lux = LuxThread(60, self.handle_data, tsl, self.run_event, self.queue)
         thread_wheel = WheelCounterThread(18, 21, self.handle_wheel_data, self.run_event, self.queue)
-        thread_lcd = LCDDisplayThread(self.run_event, self.lcd_queue, self.lcd)
+        thread_lcd = DataReportingThread(self.run_event, self.lcd_queue, self.lcd)
         thread_button = ButtonHandlerThread(6, self.run_event, self.queue)
+
+
+        thread_lcd.start()
         thread_temp.start()
         thread_lux.start()
         thread_wheel.start()
-        thread_lcd.start()
         thread_button.start()
 
         while True:

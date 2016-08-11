@@ -37,11 +37,12 @@ class ButtonHandlerThread(threading.Thread):
                 time.sleep(0.05)
                 sec += 0.05
                 if sec > 2:
-                    print "Long Press"
+                    data = {'data_type': "button",
+                            'action': 'long_press'}
+                    self.queue.put(data)
 
                 if state == 0:
                     counter += 1
-                    print "Press", counter
                     data = {'data_type': "button",
                             'action': 'press'}
                     self.queue.put(data)
@@ -50,7 +51,6 @@ class ButtonHandlerThread(threading.Thread):
 
 if __name__ == '__main__':
     print "Startup"
-    GPIO.setmode(GPIO.BCM)
     GPIO.setmode(GPIO.BCM)
 
     # use button at GPIO 7 (P1 header pin 26)
@@ -86,35 +86,5 @@ if __name__ == '__main__':
     GPIO.cleanup()
     GPIO.setmode(GPIO.BCM)
 
-
-
-def test():
-
-    # waiting for button release
-    sec = 0
-    while GPIO.input(gpio) == GPIO.LOW:
-
-        # delay for debouncing
-        time.sleep(0.05)
-        sec += 0.05
-
-        # pressed longer than 2 seconds? Shutdown!
-        if sec > 2:
-            GPIO.cleanup()
-            print "2 Second press"
-
-    # button released: toggle state
-    if (state == 0):
-        print "Press"
-        state = 1
-#        system("/home/pi/io/led0 1900 100")
-        # switch application on here ...
-    else:
-        print "release"
-        state = 0
-#        system("/home/pi/io/led0 100 1900")
-        # switch application off here ...
-
-# reset interrupt
 
 

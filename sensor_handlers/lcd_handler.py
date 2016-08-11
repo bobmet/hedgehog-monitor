@@ -4,19 +4,15 @@ import logging
 
 logger = logging.getLogger('hh')
 
-class DataReporter:
-    def __init__(self):
-        self.sensor_data = None
 
-        self.queue = Queue.Queue
-
-class LCDDisplayThread(threading.Thread):
+class DataReportingThread(threading.Thread):
     def __init__(self, run_event, queue, lcd):
         threading.Thread.__init__(self)
 
         self.run_event = run_event
         self.queue = queue
 
+        # Initialize some default values
         self.sensor_data = {"temp_f": 0,
                             "temp_c": 0,
                             "humidity": 0,
@@ -42,6 +38,12 @@ class LCDDisplayThread(threading.Thread):
                         self.sensor_data['temp_datetime'] = data['datetime']
                     elif data_type == 'button':
                         self.toggle_backlight()
+                    elif data_type == 'startup':
+                        self.lcd.clear()
+                        self.lcd.message(data['startup_message'])
+                        self.lcd.set_backlight(0)
+                        time.sleep(5)
+                        self.lcd.set_backlight(1)
 
                     logger.info("LCD THREAD:  {0}".format(self.sensor_data))
                     self.update_lcd()
@@ -58,9 +60,10 @@ class LCDDisplayThread(threading.Thread):
         self.backlight_status = not self.backlight_status
 
     def update_lcd(self):
-        message = "{0}{1} {2}%\n{3} lux".format(self.sensor_data['temp_f'],
-                                                chr(223),
-                                                self.sensor_data['humidity'],
-                                                self.sensor_data['lux'])
+        message = "{0}{1}{2} {3}%\n{4} lux".format(self.sensor_data['temp_f'],
+                                                   chr(223),
+                                                   "F",
+                                                   self.sensor_data['humidity'],
+                                                   self.sensor_data['lux'])
         self.lcd.clear()
         self.lcd.message(message)
