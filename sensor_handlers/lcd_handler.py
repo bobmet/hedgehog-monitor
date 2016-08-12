@@ -20,7 +20,10 @@ class DataReportingThread(threading.Thread):
         self.sensor_data = {"temp_f": 0,
                             "temp_c": 0,
                             "humidity": 0,
-                            "lux": 0}
+                            "lux": 0,
+                            "revolutions": 0,
+                            "distance": 0,
+                            "total_revs": 0}
         self.lcd = lcd
 
         self.backlight_status = False
@@ -33,6 +36,12 @@ class DataReportingThread(threading.Thread):
 
         self.version_msg = version_msg
         self.lcd.message(self.version_msg)
+
+        self.display_version = 0
+        self.display_wx = 1
+        self.display_wheel = 2
+        self.display_clock = 3
+        self.display_msg = 4
 
     def run(self):
         timeout_counter = 0
@@ -48,7 +57,7 @@ class DataReportingThread(threading.Thread):
                     timeout_counter = 0
 
                 # If we're showing the clock, update it
-                if self.current_message_num == 3:
+                if self.current_message_num == self.display_clock:
                     current_time = datetime.datetime.now().strftime("%H:%M")
                     if current_time != last_datetime:
                         self.update_time()
@@ -67,12 +76,14 @@ class DataReportingThread(threading.Thread):
                         self.sensor_data['lux'] = data['lux']
                         self.sensor_data['temp_datetime'] = data['datetime']
                     elif data_type == 'wheel':
-                        logger.info("WHEEL/LCD: {0}".format(data))
+                        self.sensor_data['revolutions'] = data['revolutions']
+                        self.sensor_data['distance'] = data['distance']
+                        self.sensor_data['total_revs'] += data['revolutions']
                     elif data_type == 'button':
                         self.update_lcd()
                         timeout_counter = 0
 
-                    logger.info("LCD THREAD:  {0}".format(self.sensor_data))
+#                    logger.info("LCD THREAD:  {0}".format(self.sensor_data))
 
             except Queue.Empty:
                 # The queue.get with a timeout throws a Queue.Empty exception. Just continue if that happens
@@ -86,31 +97,35 @@ class DataReportingThread(threading.Thread):
         self.backlight_status = not self.backlight_status
 
     def update_lcd(self):
+        logger.info("Current screen: {0}".format(self.current_message_num))
         if self.backlight_status is False:
             self.backlight_status = True
             self.lcd.set_backlight(0)
         else:
-            if self.current_message_num == 0:
+            if self.current_message_num == self.display_version:
                 message = self.version_msg
-            elif self.current_message_num == 1:
+            elif self.current_message_num == self.display_wx:
                 message = "{0}{1}{2} {3}%\n{4} lux".format(self.sensor_data['temp_f'],
                                                            chr(223),
                                                            "F",
                                                            self.sensor_data['humidity'],
                                                            self.sensor_data['lux'])
-            elif self.current_message_num == 2:
+            elif self.current_message_num == self.display_clock:
                 self.update_time()
 
-            elif self.current_message_num == 3:
-                message = "Message #4 ABCD\nS'more monitor"
+            elif self.current_message_num == self.display_wheel:
+                message = "Revs: {0} {1:.2f}".format(self.sensor_data['total_revs'], self.sensor_data['distance'])
 
-            if self.current_message_num != 2:
+            elif self.current_message_num == self.display_msg:
+                message = "Message #5\nNY 5-4 BOS"
+
+            if self.current_message_num != self.display_clock:
                 self.lcd.clear()
                 self.lcd.message(message)
 
             self.current_message_num += 1
-            if self.current_message_num > 3:
-                self.current_message_num = 0
+            if self.current_message_num > self.display_msg:
+                self.current_message_num = self.display_version
 
 
     def update_time(self):
