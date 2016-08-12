@@ -25,7 +25,7 @@ from sensor_handlers.data_collection_thread import DataCollectionThread
 from sensor_handlers.lcd_handler import DataReportingThread
 from sensor_handlers.wheel_counter import WheelCounterThread
 
-__version__ = "0.0.11"
+__version__ = "0.0.12"
 
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -134,7 +134,7 @@ class MainLoop:
                 # responsiveness on the loop (e.g. for CTRL+C shutdown) and will also act as the loop
                 # delay since we're basically in a busy-wait loop
                 data = self.queue.get(True, 0.001)
-                logger.info("{0}: {1}".format(threading.currentThread().name, data))
+#                logger.info("{0}: {1}".format(threading.currentThread().name, data))
 
                 self.lcd_queue.put(data)
 

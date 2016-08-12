@@ -117,7 +117,6 @@ class WheelCounterThread(multiprocessing.Process):
                         'moving_time': period_elapsed,
                         'active': wheel_active}
 
-                logger.info("PROC: {0}".format(data))
                 self.queue.put(data)
                 period_counter = 0
                 period_detection_count = 0
