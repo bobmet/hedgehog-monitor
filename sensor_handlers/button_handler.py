@@ -7,15 +7,16 @@
 import time
 import RPi.GPIO as GPIO
 import threading
-import Queue
+from multiprocessing import Process, Queue
 
 __version__ = "0.0.1"
 
 
-class ButtonHandlerThread(threading.Thread):
+class ButtonHandlerThread(Process):
     def __init__(self, gpio_pin, run_event, queue):
 
-        threading.Thread.__init__(self)
+        Process.__init__(self)
+#        threading.Thread.__init__(self)
 
         self.gpio_pin = gpio_pin
         self.run_event = run_event
@@ -26,28 +27,30 @@ class ButtonHandlerThread(threading.Thread):
 
     def run(self):
         counter = 0
-        while self.run_event.is_set():
+        try:
+            while self.run_event.is_set():
 
-            # waiting for interrupt from button press
-            GPIO.wait_for_edge(self.gpio_pin, GPIO.FALLING, timeout=100)
+                # waiting for interrupt from button press
+                GPIO.wait_for_edge(self.gpio_pin, GPIO.FALLING, timeout=100)
 
-            sec = 0
-            state = 0
-            while GPIO.input(self.gpio_pin) == GPIO.LOW:
-                time.sleep(0.05)
-                sec += 0.05
-                if sec > 2:
-                    data = {'data_type': "button",
-                            'action': 'long_press'}
-                    self.queue.put(data)
+                sec = 0
+                state = 0
+                while GPIO.input(self.gpio_pin) == GPIO.LOW:
+                    time.sleep(0.05)
+                    sec += 0.05
+                    if sec > 2:
+                        data = {'data_type': "button",
+                                'action': 'long_press'}
+                        self.queue.put(data)
 
-                if state == 0:
-                    counter += 1
-                    data = {'data_type': "button",
-                            'action': 'press'}
-                    self.queue.put(data)
-                    state = 1
-
+                    if state == 0:
+                        counter += 1
+                        data = {'data_type': "button",
+                                'action': 'press'}
+                        self.queue.put(data)
+                        state = 1
+        except KeyboardInterrupt:
+            logger.info("BUTTON THREAD INTERRUPT")
 
 if __name__ == '__main__':
     print "Startup"
