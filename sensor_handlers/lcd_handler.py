@@ -66,6 +66,8 @@ class DataReportingThread(threading.Thread):
                     elif data_type == 'light':
                         self.sensor_data['lux'] = data['lux']
                         self.sensor_data['temp_datetime'] = data['datetime']
+                    elif data_type == 'wheel':
+                        logger.info("WHEEL/LCD: {0}".format(data))
                     elif data_type == 'button':
                         self.update_lcd()
                         timeout_counter = 0
