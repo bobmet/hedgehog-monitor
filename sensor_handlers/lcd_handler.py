@@ -23,7 +23,8 @@ class DataReportingThread(threading.Thread):
                             "lux": 0,
                             "revolutions": 0,
                             "distance": 0,
-                            "total_revs": 0}
+                            "total_revs": 0,
+                            "total_distance", 0}
         self.lcd = lcd
 
         self.backlight_status = False
@@ -95,6 +96,7 @@ class DataReportingThread(threading.Thread):
         elif data_type == 'wheel':
             self.sensor_data['revolutions'] = data['revolutions']
             self.sensor_data['distance'] = data['distance']
+            self.sensor_data['total_distance'] += data['distance']
             self.sensor_data['total_revs'] += data['revolutions']
             if self.current_message_num == self.display_wheel:
                 self.update_wheel()
