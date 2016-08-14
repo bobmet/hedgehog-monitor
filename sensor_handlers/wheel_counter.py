@@ -12,7 +12,6 @@ logger = logging.getLogger('hh')
 
 class WheelCounterThread(multiprocessing.Process):
     def __init__(self, sensor_pin, led_pin, callback, run_event, queue):
-#        threading.Thread.__init__(self)
         multiprocessing.Process.__init__(self)
 
         GPIO.setmode(GPIO.BCM)

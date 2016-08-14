@@ -2,9 +2,10 @@ import threading
 import Queue
 import logging
 import datetime
+import sqlite3
+import os
 
-
-__version__ = "0.0.5"
+__version__ = "0.0.6"
 
 logger = logging.getLogger('hh')
 
@@ -24,7 +25,7 @@ class DataReportingThread(threading.Thread):
                             "revolutions": 0,
                             "distance": 0,
                             "total_revs": 0,
-                            "total_distance", 0}
+                            "total_distance": 0}
         self.lcd = lcd
 
         self.backlight_status = False
@@ -44,6 +45,21 @@ class DataReportingThread(threading.Thread):
         self.display_clock = 3
         self.display_msg = 4
         self.timeout_counter = 0
+
+        if os.path.exists("hedgehog.db"):
+            logger.info("Found")
+        else:
+            logger.info("not Found")
+            conn = sqlite3.connect("hedgehog.db")
+
+            c = conn.cursor()
+            c.execute("CREATE TABLE temp_tbl (timestamp DATETIME, temp REAL, humidity REAL)")
+            c.execute("CREATE TABLE light_tbl (timestamp DATETIME, lux INTEGER)")
+            c.execute("CREATE TABLE wheel_tbl(timestamp DATETIME, revolutions REAL, distance REAL, "
+                      "moving_time REAL, avg_speed REAL, active INTEGER)")
+            conn.commit()
+            conn.close()
+
 
     def run(self):
         last_datetime = None
@@ -66,7 +82,7 @@ class DataReportingThread(threading.Thread):
                         last_datetime = current_time
 
                 data = self.queue.get(True, self.loop_sleep)
-
+                logger.info("LCD_HANDLER: {0}".format(data))
                 if 'data_type' in data:
                     self.handle_update(data)
 
@@ -75,6 +91,44 @@ class DataReportingThread(threading.Thread):
                 continue
 
         logger.info("Thread {0} closing".format(threading.currentThread().name))
+
+    def save_to_database(self, data):
+        """
+
+        :param data:
+        :return:
+        """
+        data_type = data['data_type']
+        if data_type == 'temperature':
+            sql = ("INSERT INTO temp_tbl (timestamp, temp, humidity) values ('{0}', {1}, {2})".format(
+                data['datetime'],
+                data['temp_f'],
+                data['humidity']))
+        elif data_type == "wheel":
+            active = 1 if data['active'] is True else 0
+            sql = ("INSERT INTO wheel_tbl (timestamp, revolutions, distance, moving_time, avg_speed, active)"
+                   "values ('{0}', {1}, {2}, {3}, {4}, {5})".format(
+                data['datetime'],
+                data['revolutions'],
+                data['distance'],
+                data['moving_time'],
+                data['avg_speed'],
+                active))
+        elif data_type == 'light':
+            sql = ("INSERT INTO light_tbl (timestamp, lux) values ('{0}', {1})".format(
+                data['datetime'],
+                data['lux']))
+        else:
+            return
+
+        conn = sqlite3.connect("hedgehog.db")
+        c = conn.cursor()
+        try:
+            c.execute(sql)
+            conn.commit()
+            conn.close()
+        except Exception, ex:
+            print "Error inserting into table", ex, type(ex)
 
     def handle_update(self, data):
         data_type = data['data_type']
@@ -85,13 +139,12 @@ class DataReportingThread(threading.Thread):
             self.sensor_data['humidity'] = round(float(data['humidity']), 1)
             self.sensor_data['temp_datetime'] = data['datetime']
             if self.current_message_num == self.display_wx:
-                logger.info("TEMP UPDATE")
                 self.update_wx()
+
         elif data_type == 'light':
             self.sensor_data['lux'] = data['lux']
             self.sensor_data['temp_datetime'] = data['datetime']
             if self.current_message_num == self.display_wx:
-                logger.info("LUX UPDATE")
                 self.update_wx()
         elif data_type == 'wheel':
             self.sensor_data['revolutions'] = data['revolutions']
@@ -104,7 +157,7 @@ class DataReportingThread(threading.Thread):
             self.update_lcd()
             self.timeout_counter = 0
 
-        #                    logger.info("LCD THREAD:  {0}".format(self.sensor_data))
+        self.save_to_database(data)
 
     def toggle_backlight(self):
         backlight_set = 0 if self.backlight_status is True else 1
@@ -147,7 +200,7 @@ class DataReportingThread(threading.Thread):
         self.lcd.message(message)
 
     def update_wheel(self):
-        message = "Revs: {0} {1:.2f}".format(self.sensor_data['total_revs'], self.sensor_data['distance'])
+        message = "Revs: {0} {1:.2f}".format(self.sensor_data['total_revs'], self.sensor_data['total_distance'])
         self.lcd.clear()
         self.lcd.message(message)
 

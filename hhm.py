@@ -25,7 +25,7 @@ from sensor_handlers.data_collection_thread import DataCollectionThread
 from sensor_handlers.lcd_handler import DataReportingThread
 from sensor_handlers.wheel_counter import WheelCounterThread
 
-__version__ = "0.0.12"
+__version__ = "0.0.14"
 
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -115,7 +115,7 @@ class MainLoop:
 
         original_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-        thread_temp = TemperatureThread(30, self.handle_wx_data, dht, self.run_event, self.queue)
+        thread_temp = TemperatureThread(60, self.handle_wx_data, dht, self.run_event, self.queue)
         thread_lux = LuxThread(60, self.handle_data, tsl, self.run_event, self.queue)
         thread_wheel = WheelCounterThread(18, 21, self.handle_wheel_data, self.run_event, self.queue)
         thread_lcd = DataReportingThread(self.run_event, self.lcd_queue, self.lcd, self.version_msg)
