@@ -189,8 +189,19 @@ class DataReportingThread(threading.Thread):
 
 
     def update_message(self):
-        message = "Message #5\nNY 5-4 BOS"
+        # 72.4.F 71.6 77.6
+        temps = self.get_temp_extremes()
+        avg_temp = temps[0]
+        min_temp = temps[1]
+        max_temp = temps[2]
+        avg_hum = temps[3]
+        min_hum = temps[4]
+        max_hum = temps[5]
+        # avg_temp = round(float(temps[0]), 1)
+        # max_temp = round(float(temps[1]), 1)
+        # min_temp = round(float(temps[2]), 1)
 
+        message = "{0:.1f} {1:.1f} {2:.1f}\n{3:.1f}% {4:.1f}% {5:.1f}".format(avg_temp, min_temp, max_temp, avg_hum, min_hum, max_hum)
         self.lcd.clear()
         self.lcd.message(message)
 
@@ -200,17 +211,24 @@ class DataReportingThread(threading.Thread):
         self.lcd.message(message)
 
     def update_wheel(self):
-        message = "Revs: {0} {1:.2f}".format(self.sensor_data['total_revs'], self.sensor_data['total_distance'])
+        wheel_data = self.get_wheel_data()
+        distance = wheel_data[0]
+        revs = wheel_data[1]
+        moving_time = wheel_data[2]
+        speed = moving_time / distance
+
+        message = "Revs: {0:.0} {1:.3f}\n{2:.0f} {3:.1f} mph".format(revs, distance, moving_time, speed)
         self.lcd.clear()
         self.lcd.message(message)
 
     def update_wx(self):
+#        message = "{current} {avg}".format(current=current, avg=avg_temp)
         message = "{0}{1}{2} {3}%\n{4} lux".format(self.sensor_data['temp_f'],
                                                    chr(223),
                                                    "F",
                                                    self.sensor_data['humidity'],
                                                    self.sensor_data['lux'])
-
+        logger.info(message)
         self.lcd.clear()
         self.lcd.message(message)
 
@@ -220,3 +238,25 @@ class DataReportingThread(threading.Thread):
         message = display_time
         self.lcd.clear()
         self.lcd.message(message)
+
+    def get_wheel_data(self):
+        conn = sqlite3.connect('hedgehog.db')
+        c = conn.cursor()
+
+        sql = "select sum(distance),sum(revolutions), sum(moving_time) " \
+              "from wheel_tbl where timestamp > datetime('now', '-24 hours')"
+
+        result = c.execute(sql).fetchone()
+        conn.close()
+        return result
+
+    def get_temp_extremes(self):
+        conn = sqlite3.connect('hedgehog.db')
+        c = conn.cursor()
+
+        sql = "select avg(temp), min(temp), max(temp), avg(humidity), min(humidity), max(humidity) " \
+              "from temp_tbl where timestamp > datetime('now', '-24 hours')"
+
+        result = c.execute(sql).fetchone()
+        conn.close()
+        return result
