@@ -214,10 +214,14 @@ class DataReportingThread(threading.Thread):
 
     def update_wheel(self):
         wheel_data = self.get_wheel_data()
-        distance = wheel_data[0]
-        revs = wheel_data[1]
-        moving_time = wheel_data[2]
-        speed = distance / moving_time * 3600
+
+        distance = wheel_data[0] if wheel_data[0] is not None else 0
+        revs = wheel_data[1] if wheel_data[1] is not None else 0
+        moving_time = wheel_data[2] if wheel_data[2] is not None else 0
+        if moving_time > 0:
+            speed = distance / moving_time * 3600
+        else:
+            speed = 0
 
         turns_display = "{revs:.0f}t".format(revs=revs)
         distance_display = "{dist:>{just}.3f}mi".format(dist=distance, just=16-len(turns_display) - 1 - 2)
