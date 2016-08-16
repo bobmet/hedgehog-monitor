@@ -1,0 +1,11 @@
+
+pins:
+    dht_led_pin:  22
+    dht_data_pin: 4
+    wheel_sensor_pin: 18
+    wheel_led_pin:  21
+
+timeouts:
+    wheel_timeout: 60
+    wx_timeout:  60
+    lux_timeout: 60

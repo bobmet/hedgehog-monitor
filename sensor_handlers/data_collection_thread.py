@@ -12,12 +12,11 @@ class DataCollectionThread(multiprocessing.Process):
     Class to handle acquiring data from a sensor.  It's a subclass of the main threading.Thread class
     to handle getting the data in a separate thread.
     """
-    def __init__(self, loop_delay, callback, sensor_module, run_event, queue=None):
+    def __init__(self, loop_delay, sensor_module, run_event, queue=None):
 
         multiprocessing.Process.__init__(self)
 
         self.loop_delay = loop_delay
-        self.callback = callback
         self.sensor_module = sensor_module
         self.run_event = run_event
         self.queue = queue

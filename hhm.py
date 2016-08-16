@@ -24,8 +24,9 @@ from sensor_handlers.button_handler import ButtonHandlerThread
 from sensor_handlers.data_collection_thread import DataCollectionThread
 from sensor_handlers.lcd_handler import DataReportingThread
 from sensor_handlers.wheel_counter import WheelCounterThread
+import yaml
 
-__version__ = "0.0.14"
+__version__ = "0.0.15"
 
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -69,6 +70,7 @@ class LuxThread(DataCollectionThread):
 
 class MainLoop:
     def __init__(self):
+        self.load_config()
         self.gpio_setup()
         self.run_event = threading.Event()
         self.queue = Queue()
@@ -76,26 +78,14 @@ class MainLoop:
         self.lcd = LCDDisplay()
 
         self.version_msg = "S'more Monitor\nv{0}".format(__version__)
-        self.wx_file = ResultsWriter(filename='temperature.csv',
-                                     fieldnames=['datetime', 'temp_c', 'temp_f', 'humidity'])
-        self.lux_file = ResultsWriter(filename='lux.csv', fieldnames=['datetime', 'lux'])
-        self.wheel_file = ResultsWriter(filename='wheel.csv',
-                                        fieldnames=['datetime', 'distance', 'moving_time', 'revolutions',
-                                                    'avg_speed', 'active'])
 
         return
 
-    def handle_wx_data(self, data):
-        logger.info("WX: {0}".format(data))
-        self.wx_file.writerow(data)
+    def load_config(self):
+        with open("hhconfig.yml", "rb") as fp:
+            self.config = yaml.safe_load(fp)
 
-    def handle_data(self, data):
-        logger.info(data)
-        self.lux_file.writerow(data)
-
-    def handle_wheel_data(self, data):
-        logger.info(data)
-        self.wheel_file.writerow(data)
+        print self.config['pins']
 
     def gpio_setup(self):
         GPIO.setmode(GPIO.BCM)
@@ -107,17 +97,21 @@ class MainLoop:
     def startup(self):
         self.run_event.set()
 
-        dht_led_pin = 22
-        dht_data_pin = 4
+        dht_led_pin = self.config['pins']['dht_led_pin']
+        dht_data_pin = self.config['pins']['dht_data_pin']
         GPIO.setup(dht_led_pin, GPIO.OUT)
         dht = dht22.DHT22(data_gpio_pin=dht_data_pin, led_gpio_pin=dht_led_pin)
         tsl = tsl_sensor.TSLSensor()
 
         original_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-        thread_temp = TemperatureThread(60, self.handle_wx_data, dht, self.run_event, self.queue)
-        thread_lux = LuxThread(60, self.handle_data, tsl, self.run_event, self.queue)
-        thread_wheel = WheelCounterThread(18, 21, self.handle_wheel_data, self.run_event, self.queue)
+        thread_temp = TemperatureThread(self.config['timeouts']['wx_timeout'], dht, self.run_event, self.queue)
+        thread_lux = LuxThread(self.config['timeouts']['lux_timeout'], tsl, self.run_event, self.queue)
+        thread_wheel = WheelCounterThread(self.config['pins']['wheel_sensor_pin'],
+                                          self.config['pins']['wheel_led_pin'],
+                                          self.config['timeouts']['wheel_timeout'],
+                                          self.run_event,
+                                          self.queue)
         thread_lcd = DataReportingThread(self.run_event, self.lcd_queue, self.lcd, self.version_msg)
         thread_button = ButtonHandlerThread(6, self.run_event, self.queue)
 
