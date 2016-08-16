@@ -6,6 +6,8 @@ pins:
     wheel_led_pin:  21
 
 timeouts:
-    wheel_timeout: 60
+    wheel_loop_timer: 60
     wx_timeout:  60
     lux_timeout: 60
+    wheel_inactivity_timer: 2
+    lcd_fadeout_time: 10

@@ -11,11 +11,13 @@ logger = logging.getLogger('hh')
 
 
 class DataReportingThread(threading.Thread):
-    def __init__(self, run_event, queue, lcd, version_msg):
+    def __init__(self, run_event, queue, lcd, version_msg, fadeout_time):
         threading.Thread.__init__(self)
 
         self.run_event = run_event
         self.queue = queue
+
+        self.fadeout_time = fadeout_time
 
         # Initialize some default values
         self.sensor_data = {"temp_f": 0,
@@ -33,7 +35,7 @@ class DataReportingThread(threading.Thread):
         self.message_list = list()
         self.current_message_num = 0
 
-        self.timeout_length = 6
+#        self.timeout_length = 6
         self.loop_sleep = 0.001
 
         self.version_msg = version_msg
@@ -67,7 +69,7 @@ class DataReportingThread(threading.Thread):
             try:
                 self.timeout_counter += self.loop_sleep
 
-                if self.timeout_counter >= self.timeout_length:
+                if self.timeout_counter >= self.fadeout_time:
                     if self.backlight_status is True:
                         self.lcd.set_backlight(1)
                         self.backlight_status = False
@@ -215,20 +217,24 @@ class DataReportingThread(threading.Thread):
         distance = wheel_data[0]
         revs = wheel_data[1]
         moving_time = wheel_data[2]
-        speed = moving_time / distance
+        speed = distance / moving_time * 3600
 
-        message = "Revs: {0:.0} {1:.3f}\n{2:.0f} {3:.1f} mph".format(revs, distance, moving_time, speed)
+        turns_display = "{revs:.0f}t".format(revs=revs)
+        distance_display = "{dist:>{just}.3f}mi".format(dist=distance, just=16-len(turns_display) - 1 - 2)
+        time_display = "{time:,.0f}s".format(time=moving_time)
+        speed_display = "{speed:{just}.2f}mph".format(speed=speed, just=16-len(time_display) - 1 - 2)
+        message = "{0} {1}\n{2}{3}".format(turns_display, distance_display, time_display, speed_display)
         self.lcd.clear()
         self.lcd.message(message)
 
     def update_wx(self):
-#        message = "{current} {avg}".format(current=current, avg=avg_temp)
-        message = "{0}{1}{2} {3}%\n{4} lux".format(self.sensor_data['temp_f'],
-                                                   chr(223),
-                                                   "F",
-                                                   self.sensor_data['humidity'],
-                                                   self.sensor_data['lux'])
-        logger.info(message)
+        temp_display = "{0}{1}{2}".format(self.sensor_data['temp_f'], chr(223), 'F')
+        humidity_display = "{0:.1f}%".format(self.sensor_data['humidity'])
+        lux_display = "{0} lux".format(self.sensor_data['lux'])
+
+        temp_len = len(temp_display)
+        message = "{0} {1:>{just}}\n{lux:^16}".format(temp_display,humidity_display, just=16-temp_len-1, lux=lux_display)
+
         self.lcd.clear()
         self.lcd.message(message)
 

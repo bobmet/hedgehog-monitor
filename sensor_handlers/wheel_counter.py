@@ -11,7 +11,7 @@ logger = logging.getLogger('hh')
 
 
 class WheelCounterThread(multiprocessing.Process):
-    def __init__(self, sensor_pin, led_pin, loop_time, run_event, queue):
+    def __init__(self, sensor_pin, led_pin, loop_time, inactivity_timeout, run_event, queue):
         multiprocessing.Process.__init__(self)
 
         GPIO.setmode(GPIO.BCM)
@@ -20,6 +20,7 @@ class WheelCounterThread(multiprocessing.Process):
         self.led_pin = led_pin
         self.run_event = run_event
         self.queue = queue
+        self.inactivity_timeout = inactivity_timeout
         GPIO.setup(self.sensor_pin, GPIO.IN)
         GPIO.setup(self.led_pin, GPIO.OUT)
 
@@ -82,15 +83,15 @@ class WheelCounterThread(multiprocessing.Process):
                 # No detection - the magnet has moved away from the sensor
                 active = False
 
-                # Shut the LED off - if it was on.  We do the check here so we don't keep sending unecessary 'off'
+                # Shut the LED off - if it was on.  We do the check here so we don't keep sending unnecessary 'off'
                 # commands to the LED pin
                 if led_on is True:
                     GPIO.output(self.led_pin, 0)
                     led_on = False
 
             # This is a check to see if the wheel has stopped moving for a time out period (e.g. 5 seconds).
-            if last_time is not None and (this_time - last_time).total_seconds() > 5:
-                logger.info("-------- Inactive for 5 seconds")
+            if last_time is not None and (this_time - last_time).total_seconds() > self.inactivity_timeout:
+                logger.info("-------- Inactive for {0} seconds".format(self.inactivity_timeout))
                 last_time = None
 
             period_counter += timeout_value

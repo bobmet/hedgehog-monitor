@@ -44,7 +44,6 @@ METRIC_UNITS = False
 # ---------------------------------
 
 
-
 class TemperatureThread(DataCollectionThread):
     def get_data(self):
         humidity, temp = self.sensor_module.get_data()
@@ -67,10 +66,9 @@ class LuxThread(DataCollectionThread):
         return data
 
 
-
 class MainLoop:
     def __init__(self):
-        self.load_config()
+        self.config = self.load_config()
         self.gpio_setup()
         self.run_event = threading.Event()
         self.queue = Queue()
@@ -83,9 +81,9 @@ class MainLoop:
 
     def load_config(self):
         with open("hhconfig.yml", "rb") as fp:
-            self.config = yaml.safe_load(fp)
+            config = yaml.safe_load(fp)
 
-        print self.config['pins']
+        return config
 
     def gpio_setup(self):
         GPIO.setmode(GPIO.BCM)
@@ -109,10 +107,12 @@ class MainLoop:
         thread_lux = LuxThread(self.config['timeouts']['lux_timeout'], tsl, self.run_event, self.queue)
         thread_wheel = WheelCounterThread(self.config['pins']['wheel_sensor_pin'],
                                           self.config['pins']['wheel_led_pin'],
-                                          self.config['timeouts']['wheel_timeout'],
+                                          self.config['timeouts']['wheel_loop_timer'],
+                                          self.config['timeouts']['wheel_inactivity_timer'],
                                           self.run_event,
                                           self.queue)
-        thread_lcd = DataReportingThread(self.run_event, self.lcd_queue, self.lcd, self.version_msg)
+        thread_lcd = DataReportingThread(self.run_event, self.lcd_queue, self.lcd, self.version_msg,
+                                         self.config['timeouts']['lcd_fadeout_time'])
         thread_button = ButtonHandlerThread(6, self.run_event, self.queue)
 
         signal.signal(signal.SIGINT, original_sigint_handler)
