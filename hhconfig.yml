@@ -1,13 +1,16 @@
 
 pins:
-    dht_led_pin:  22
-    dht_data_pin: 4
-    wheel_sensor_pin: 18
-    wheel_led_pin:  21
+  dht_led_pin:  22
+  dht_data_pin: 4
+  wheel_sensor_pin: 18
+  wheel_led_pin:  21
 
 timeouts:
-    wheel_loop_timer: 60
-    wx_timeout:  60
-    lux_timeout: 60
-    wheel_inactivity_timer: 2
-    lcd_fadeout_time: 10
+  wheel_loop_timer: 60
+  wx_timeout:  60
+  lux_timeout: 60
+  wheel_inactivity_timer: 2
+  lcd_fadeout_time: 10
+
+wheel_info:
+  circumference:  13

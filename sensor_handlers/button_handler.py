@@ -22,6 +22,8 @@ class ButtonHandlerThread(Process):
         self.run_event = run_event
         self.queue = queue
 
+        self.debounce_timer = 0.10
+
         # setup GPIO "gpio" as input with pull-up
         GPIO.setup(self.gpio_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
@@ -36,8 +38,8 @@ class ButtonHandlerThread(Process):
                 sec = 0
                 state = 0
                 while GPIO.input(self.gpio_pin) == GPIO.LOW:
-                    time.sleep(0.05)
-                    sec += 0.05
+                    time.sleep(self.debounce_timer)
+                    sec += self.debounce_timer
                     if sec > 2:
                         data = {'data_type': "button",
                                 'action': 'long_press'}
