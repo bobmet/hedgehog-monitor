@@ -22,7 +22,7 @@ class ButtonHandlerThread(Process):
         self.run_event = run_event
         self.queue = queue
 
-        self.debounce_timer = 0.10
+        self.debounce_timer = 0.20
 
         # setup GPIO "gpio" as input with pull-up
         GPIO.setup(self.gpio_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
