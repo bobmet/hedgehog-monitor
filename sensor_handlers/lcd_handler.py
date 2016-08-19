@@ -31,7 +31,6 @@ class DataReportingThread(threading.Thread):
         self.lcd = lcd
 
         self.backlight_status = False
-
         self.message_list = list()
         self.current_message_num = 0
 
@@ -48,20 +47,24 @@ class DataReportingThread(threading.Thread):
         self.display_msg = 4
         self.timeout_counter = 0
 
-        if os.path.exists("hedgehog.db"):
-            logger.info("Found")
-        else:
-            logger.info("not Found")
+        if os.path.exists("hedgehog.db") is False:
+            logger.info("Database file {0} not found, creating".format("hedgehog.db"))
+            self.create_database()
+
+    def create_database(self):
+        """
+        Creates the database and tables
+        :return:
+        """"
             conn = sqlite3.connect("hedgehog.db")
 
             c = conn.cursor()
-            c.execute("CREATE TABLE temp_tbl (timestamp DATETIME, temp REAL, humidity REAL)")
-            c.execute("CREATE TABLE light_tbl (timestamp DATETIME, lux INTEGER)")
+            c.execute("CREATE TABLE temp_tbl (timestamp DATETIME, temp REAL, humidity REAL, remote INTEGER)")
+            c.execute("CREATE TABLE light_tbl (timestamp DATETIME, lux INTEGER, remote INTEGER)")
             c.execute("CREATE TABLE wheel_tbl(timestamp DATETIME, revolutions REAL, distance REAL, "
-                      "moving_time REAL, avg_speed REAL, active INTEGER)")
+                      "moving_time REAL, avg_speed REAL, active INTEGER, remote INTEGER)")
             conn.commit()
             conn.close()
-
 
     def run(self):
         last_datetime = None
@@ -69,6 +72,8 @@ class DataReportingThread(threading.Thread):
             try:
                 self.timeout_counter += self.loop_sleep
 
+                # If the backlight is on, check to see if it's been on longer than the "fadeout" time.  If so
+                # shut it off
                 if self.timeout_counter >= self.fadeout_time:
                     if self.backlight_status is True:
                         self.lcd.set_backlight(1)
@@ -83,8 +88,12 @@ class DataReportingThread(threading.Thread):
                         self.update_time()
                         last_datetime = current_time
 
+                # Wait here for something to show up on the queue.  If the timeout expires with nothing, it'll
+                # throw a Queue.Empty exception
                 data = self.queue.get(True, self.loop_sleep)
-                logger.info("LCD_HANDLER: {0}".format(data))
+
+#                logger.info("LCD_HANDLER: {0}".format(data))
+                # If we have some data, and it's what we're expecting...
                 if 'data_type' in data:
                     self.handle_update(data)
 
@@ -129,10 +138,15 @@ class DataReportingThread(threading.Thread):
             c.execute(sql)
             conn.commit()
             conn.close()
-        except Exception, ex:
-            print "Error inserting into table", ex, type(ex)
+        except Exception as ex:
+            logger.error("Error inserting data into table:  {0}".format(ex))
 
     def handle_update(self, data):
+        """
+        :param self:
+        :param data: Dictionary which holds the sensor data
+        :return:
+        """
         data_type = data['data_type']
 
         if data_type == 'temperature':
@@ -191,19 +205,27 @@ class DataReportingThread(threading.Thread):
 
 
     def update_message(self):
-        # 72.4.F 71.6 77.6
-        temps = self.get_temp_extremes()
-        avg_temp = temps[0]
-        min_temp = temps[1]
-        max_temp = temps[2]
-        avg_hum = temps[3]
-        min_hum = temps[4]
-        max_hum = temps[5]
-        # avg_temp = round(float(temps[0]), 1)
-        # max_temp = round(float(temps[1]), 1)
-        # min_temp = round(float(temps[2]), 1)
+        # # 72.4.F 71.6 77.6
+        # temps = self.get_temp_extremes()
+        # avg_temp = temps[0]
+        # min_temp = temps[1]
+        # max_temp = temps[2]
+        # avg_hum = temps[3]
+        # min_hum = temps[4]
+        # max_hum = temps[5]
+        # # avg_temp = round(float(temps[0]), 1)
+        # # max_temp = round(float(temps[1]), 1)
+        # # min_temp = round(float(temps[2]), 1)
+        #
+        # message = "{0:.1f} {1:.1f} {2:.1f}\n{3:.1f}% {4:.1f}% {5:.1f}".format(avg_temp, min_temp, max_temp, avg_hum, min_hum, max_hum)
+        hour = datetime.datetime.now().hour
+        if hour < 12:
+            message = "Good Morning"
+        elif 12 <= hour < 18:
+            message = "Good Afternoon"
+        else:
+            message = "Good Evening"
 
-        message = "{0:.1f} {1:.1f} {2:.1f}\n{3:.1f}% {4:.1f}% {5:.1f}".format(avg_temp, min_temp, max_temp, avg_hum, min_hum, max_hum)
         self.lcd.clear()
         self.lcd.message(message)
 
@@ -223,9 +245,12 @@ class DataReportingThread(threading.Thread):
         else:
             speed = 0
 
+        td = datetime.timedelta(seconds=moving_time)
+
         turns_display = "{revs:.0f}t".format(revs=revs)
         distance_display = "{dist:>{just}.3f}mi".format(dist=distance, just=16-len(turns_display) - 1 - 2)
         time_display = "{time:,.0f}s".format(time=moving_time)
+ #       time_display = str(td)
         speed_display = "{speed:{just}.2f}mph".format(speed=speed, just=16-len(time_display) - 1 - 2)
         message = "{0} {1}\n{2}{3}".format(turns_display, distance_display, time_display, speed_display)
         self.lcd.clear()

@@ -5,13 +5,10 @@ Created on Thu Jul 14 23:20:03 2016
 @author: pi
 """
 
-#import Queue
 import datetime
 import logging
-import math
 import threading
 from multiprocessing import Process, Queue
-import time
 import signal
 import RPi.GPIO as GPIO
 
@@ -19,14 +16,13 @@ import dht22
 import sensor_handlers
 import tsl_sensor
 from lcd_display import LCDDisplay
-from results_writer import ResultsWriter
 from sensor_handlers.button_handler import ButtonHandlerThread
 from sensor_handlers.data_collection_thread import DataCollectionThread
 from sensor_handlers.lcd_handler import DataReportingThread
 from sensor_handlers.wheel_counter import WheelCounterThread
 import yaml
 
-__version__ = "0.0.15"
+__version__ = "0.0.18"
 
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -42,7 +38,7 @@ ACCESS_KEY = "VXwJYOQYjG20KhC37EaJgGBdiyh2Ob4f"
 MINUTES_BETWEEN_READS = 1
 METRIC_UNITS = False
 # ---------------------------------
-
+CONFIG_FILENAME = "hhconfig.yml"
 
 class TemperatureThread(DataCollectionThread):
     def get_data(self):
@@ -80,19 +76,37 @@ class MainLoop:
         return
 
     def load_config(self):
-        with open("hhconfig.yml", "rb") as fp:
+        """
+        Loads the configuration file using the PyYaml package
+        :return: Dictionary containing the configuration
+        """
+
+        with open(CONFIG_FILENAME, "rb") as fp:
             config = yaml.safe_load(fp)
 
         return config
 
     def gpio_setup(self):
+        """
+        Some basic setup of the GPIO library
+        :return:
+        """
+        # Use the BCM numbering for the GPIO pins
         GPIO.setmode(GPIO.BCM)
         GPIO.setwarnings(False)
 
     def gpio_cleanup(self):
+        """
+        Takes care of the GPIO cleanup
+        :return:
+        """
         GPIO.cleanup()
 
     def startup(self):
+        """
+        Main function for the program
+        :return:
+        """
         self.run_event.set()
 
         dht_led_pin = self.config['pins']['dht_led_pin']
@@ -101,7 +115,8 @@ class MainLoop:
         dht = dht22.DHT22(data_gpio_pin=dht_data_pin, led_gpio_pin=dht_led_pin)
         tsl = tsl_sensor.TSLSensor()
 
-        original_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
+        # TODO:
+#        original_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
 
         thread_temp = TemperatureThread(self.config['timeouts']['wx_timeout'], dht, self.run_event, self.queue)
         thread_lux = LuxThread(self.config['timeouts']['lux_timeout'], tsl, self.run_event, self.queue)
@@ -115,7 +130,9 @@ class MainLoop:
                                          self.config['timeouts']['lcd_fadeout_time'])
         thread_button = ButtonHandlerThread(6, self.run_event, self.queue)
 
-        signal.signal(signal.SIGINT, original_sigint_handler)
+ #       signal.signal(signal.SIGINT, original_sigint_handler)
+
+        # Start the subprocesses
         thread_lcd.start()
         thread_temp.start()
         thread_lux.start()
