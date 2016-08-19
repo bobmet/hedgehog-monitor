@@ -22,7 +22,7 @@ from sensor_handlers.lcd_handler import DataReportingThread
 from sensor_handlers.wheel_counter import WheelCounterThread
 import yaml
 
-__version__ = "0.0.18"
+__version__ = "0.0.19"
 
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -116,7 +116,7 @@ class MainLoop:
         tsl = tsl_sensor.TSLSensor()
 
         # TODO:
-#        original_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
+        original_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
 
         thread_temp = TemperatureThread(self.config['timeouts']['wx_timeout'], dht, self.run_event, self.queue)
         thread_lux = LuxThread(self.config['timeouts']['lux_timeout'], tsl, self.run_event, self.queue)
@@ -130,7 +130,7 @@ class MainLoop:
                                          self.config['timeouts']['lcd_fadeout_time'])
         thread_button = ButtonHandlerThread(6, self.run_event, self.queue)
 
- #       signal.signal(signal.SIGINT, original_sigint_handler)
+        signal.signal(signal.SIGINT, original_sigint_handler)
 
         # Start the subprocesses
         thread_lcd.start()
@@ -143,7 +143,7 @@ class MainLoop:
             try:
                 # Wait for something on the queue, but only for a short time (1 ms). This will allow some
                 # responsiveness on the loop (e.g. for CTRL+C shutdown) and will also act as the loop
-                # delay since we're basically in a busy-wait loop
+                # delay since we're basically in a busy-wait
                 data = self.queue.get(True, 0.001)
 #                logger.info("{0}: {1}".format(threading.currentThread().name, data))
 
@@ -165,7 +165,7 @@ class MainLoop:
 #            except Queue.Empty:
                 # The queue.get with a timeout throws a Queue.Empty exception. Just continue if that happens
 #                continue
-            except Exception, ex:
+            except Exception as ex:
 #                logger.error(">{0}< exception caught".format(ex))
                 pass
 

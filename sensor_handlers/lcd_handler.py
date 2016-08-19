@@ -20,11 +20,7 @@ class DataReportingThread(threading.Thread):
         self.fadeout_time = fadeout_time
 
         # Initialize some default values
-        self.sensor_data = {"temp_f": 0,
-                            "temp_c": 0,
-                            "humidity": 0,
-                            "lux": 0,
-                            "revolutions": 0,
+        self.sensor_data = {"revolutions": 0,
                             "distance": 0,
                             "total_revs": 0,
                             "total_distance": 0}
@@ -47,24 +43,11 @@ class DataReportingThread(threading.Thread):
         self.display_msg = 4
         self.timeout_counter = 0
 
+        self.db = DatabaseHandler()
+
         if os.path.exists("hedgehog.db") is False:
             logger.info("Database file {0} not found, creating".format("hedgehog.db"))
-            self.create_database()
-
-    def create_database(self):
-        """
-        Creates the database and tables
-        :return:
-        """"
-            conn = sqlite3.connect("hedgehog.db")
-
-            c = conn.cursor()
-            c.execute("CREATE TABLE temp_tbl (timestamp DATETIME, temp REAL, humidity REAL, remote INTEGER)")
-            c.execute("CREATE TABLE light_tbl (timestamp DATETIME, lux INTEGER, remote INTEGER)")
-            c.execute("CREATE TABLE wheel_tbl(timestamp DATETIME, revolutions REAL, distance REAL, "
-                      "moving_time REAL, avg_speed REAL, active INTEGER, remote INTEGER)")
-            conn.commit()
-            conn.close()
+            self.db.create_database()
 
     def run(self):
         last_datetime = None
@@ -103,6 +86,195 @@ class DataReportingThread(threading.Thread):
 
         logger.info("Thread {0} closing".format(threading.currentThread().name))
 
+
+    def handle_update(self, data):
+        """
+        :param self:
+        :param data: Dictionary which holds the sensor data
+        :return:
+        """
+        data_type = data['data_type']
+
+        if data_type == 'temperature':
+            if self.current_message_num == self.display_wx:
+                self.update_wx()
+
+        elif data_type == 'light':
+            if self.current_message_num == self.display_wx:
+                self.update_wx()
+        elif data_type == 'wheel':
+            self.sensor_data['revolutions'] = data['revolutions']
+            self.sensor_data['distance'] = data['distance']
+            self.sensor_data['total_distance'] += data['distance']
+            self.sensor_data['total_revs'] += data['revolutions']
+            if self.current_message_num == self.display_wheel:
+                self.update_wheel()
+        elif data_type == 'button':
+            self.update_lcd()
+            self.timeout_counter = 0
+
+        self.db.save_to_database(data)
+
+    def toggle_backlight(self):
+        backlight_set = 0 if self.backlight_status is True else 1
+        self.lcd.set_backlight(backlight_set)
+        self.backlight_status = not self.backlight_status
+
+    def update_lcd(self):
+
+        if self.backlight_status is False:
+            self.backlight_status = True
+            self.lcd.set_backlight(0)
+        else:
+            self.current_message_num += 1
+            if self.current_message_num > self.display_msg:
+                self.current_message_num = self.display_version
+
+            logger.info("Current screen: {0}".format(self.current_message_num))
+
+            if self.current_message_num == self.display_version:
+                self.update_version()
+            elif self.current_message_num == self.display_wx:
+                self.update_wx()
+            elif self.current_message_num == self.display_clock:
+                self.update_time()
+            elif self.current_message_num == self.display_wheel:
+                self.update_wheel()
+            elif self.current_message_num == self.display_msg:
+                self.update_message()
+
+
+    def update_message(self):
+        hour = datetime.datetime.now().hour
+        if hour < 12:
+            message = "Good Morning"
+        elif 12 <= hour < 18:
+            message = "Good Afternoon"
+        else:
+            message = "Good Evening"
+
+        self.lcd.clear()
+        self.lcd.message(message)
+
+    def update_version(self):
+        message = self.version_msg
+        self.lcd.clear()
+        self.lcd.message(message)
+
+    def update_wheel(self):
+        wheel_data = self.db.get_wheel_data()
+
+        distance = wheel_data[0] if wheel_data[0] is not None else 0
+        revs = wheel_data[1] if wheel_data[1] is not None else 0
+        moving_time = wheel_data[2] if wheel_data[2] is not None else 0
+        if moving_time > 0:
+            speed = distance / moving_time * 3600
+        else:
+            speed = 0
+
+        td = datetime.timedelta(seconds=moving_time)
+
+        turns_display = "{revs:.0f}t".format(revs=revs)
+        distance_display = "{dist:>{just}.3f}mi".format(dist=distance, just=16-len(turns_display) - 1 - 2)
+        time_display = "{time:,.0f}s".format(time=moving_time)
+ #       time_display = str(td)
+        speed_display = "{speed:{just}.2f}mph".format(speed=speed, just=16-len(time_display) - 1 - 2)
+        message = "{0} {1}\n{2}{3}".format(turns_display, distance_display, time_display, speed_display)
+        self.lcd.clear()
+        self.lcd.message(message)
+
+    def update_wx(self):
+
+        data = self.db.get_last_wx_data()
+        temp_f = data[0]
+        humidity = data[1]
+        data = self.db.get_last_light_data()
+        lux = data[0]
+
+        temp_display = "{0}{1}{2}".format(temp_f, chr(223), 'F')
+        humidity_display = "{0:.1f}%".format(humidity)
+        lux_display = "{0} lux".format(lux)
+
+        temp_len = len(temp_display)
+        message = "{0} {1:>{just}}\n{lux:^16}".format(temp_display,
+                                                      humidity_display,
+                                                      just=16-temp_len-1,
+                                                      lux=lux_display)
+
+        self.lcd.clear()
+        self.lcd.message(message)
+
+    def update_time(self):
+        time_now = datetime.datetime.now()
+        display_time = time_now.strftime("%a %m/%d/%Y\n%I:%M %p")
+        message = display_time
+        self.lcd.clear()
+        self.lcd.message(message)
+
+    def get_wheel_data(self):
+        conn = sqlite3.connect('hedgehog.db')
+        c = conn.cursor()
+
+        sql = "select sum(distance),sum(revolutions), sum(moving_time) " \
+              "from wheel_tbl where timestamp > datetime('now', '-24 hours')"
+
+        result = c.execute(sql).fetchone()
+        conn.close()
+        return result
+
+
+class DatabaseHandler:
+    def __init__(self):
+        self.db_name = 'hedgehog.db'
+
+
+    def get_data(self, sql):
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+
+        result = c.execute(sql).fetchone()
+        conn.close()
+
+        data = tuple(result)
+        return data
+
+    def get_wheel_data(self):
+        sql = "select sum(distance),sum(revolutions), sum(moving_time) " \
+              "from wheel_tbl where timestamp > datetime('now', '-24 hours')"
+
+        return self.get_data(sql)
+
+    def get_last_light_data(self):
+        sql = "select lux, timestamp from lux_tbl order by timestamp DESC"
+        data = self.get_data(sql)
+        return data
+
+    def get_last_wx_data(self):
+        """
+        Retrieves the most recent value from the temperature/humidity table
+        :param self:
+        :return:
+        """
+        sql = "select temp, humidity, timestamp from temp_tbl order by timestamp DESC"
+        data = self.get_data(sql)
+        return data
+
+
+    def create_database(self):
+        """
+        Creates the database and tables
+        :return:
+        """
+        conn = sqlite3.connect(self.db_name)
+
+        c = conn.cursor()
+        c.execute("CREATE TABLE temp_tbl (timestamp DATETIME, temp REAL, humidity REAL, remote INTEGER)")
+        c.execute("CREATE TABLE light_tbl (timestamp DATETIME, lux INTEGER, remote INTEGER)")
+        c.execute("CREATE TABLE wheel_tbl(timestamp DATETIME, revolutions REAL, distance REAL, "
+                  "moving_time REAL, avg_speed REAL, active INTEGER, remote INTEGER)")
+        conn.commit()
+        conn.close()
+
     def save_to_database(self, data):
         """
 
@@ -140,158 +312,3 @@ class DataReportingThread(threading.Thread):
             conn.close()
         except Exception as ex:
             logger.error("Error inserting data into table:  {0}".format(ex))
-
-    def handle_update(self, data):
-        """
-        :param self:
-        :param data: Dictionary which holds the sensor data
-        :return:
-        """
-        data_type = data['data_type']
-
-        if data_type == 'temperature':
-            self.sensor_data['temp_f'] = round(float(data['temp_f']), 1)
-            self.sensor_data['temp_c'] = round(float(data['temp_c']), 1)
-            self.sensor_data['humidity'] = round(float(data['humidity']), 1)
-            self.sensor_data['temp_datetime'] = data['datetime']
-            if self.current_message_num == self.display_wx:
-                self.update_wx()
-
-        elif data_type == 'light':
-            self.sensor_data['lux'] = data['lux']
-            self.sensor_data['temp_datetime'] = data['datetime']
-            if self.current_message_num == self.display_wx:
-                self.update_wx()
-        elif data_type == 'wheel':
-            self.sensor_data['revolutions'] = data['revolutions']
-            self.sensor_data['distance'] = data['distance']
-            self.sensor_data['total_distance'] += data['distance']
-            self.sensor_data['total_revs'] += data['revolutions']
-            if self.current_message_num == self.display_wheel:
-                self.update_wheel()
-        elif data_type == 'button':
-            self.update_lcd()
-            self.timeout_counter = 0
-
-        self.save_to_database(data)
-
-    def toggle_backlight(self):
-        backlight_set = 0 if self.backlight_status is True else 1
-        self.lcd.set_backlight(backlight_set)
-        self.backlight_status = not self.backlight_status
-
-    def update_lcd(self):
-
-        if self.backlight_status is False:
-            self.backlight_status = True
-            self.lcd.set_backlight(0)
-        else:
-            self.current_message_num += 1
-            if self.current_message_num > self.display_msg:
-                self.current_message_num = self.display_version
-
-            logger.info("Current screen: {0}".format(self.current_message_num))
-
-            if self.current_message_num == self.display_version:
-                self.update_version()
-            elif self.current_message_num == self.display_wx:
-                self.update_wx()
-            elif self.current_message_num == self.display_clock:
-                self.update_time()
-            elif self.current_message_num == self.display_wheel:
-                self.update_wheel()
-            elif self.current_message_num == self.display_msg:
-                self.update_message()
-
-
-    def update_message(self):
-        # # 72.4.F 71.6 77.6
-        # temps = self.get_temp_extremes()
-        # avg_temp = temps[0]
-        # min_temp = temps[1]
-        # max_temp = temps[2]
-        # avg_hum = temps[3]
-        # min_hum = temps[4]
-        # max_hum = temps[5]
-        # # avg_temp = round(float(temps[0]), 1)
-        # # max_temp = round(float(temps[1]), 1)
-        # # min_temp = round(float(temps[2]), 1)
-        #
-        # message = "{0:.1f} {1:.1f} {2:.1f}\n{3:.1f}% {4:.1f}% {5:.1f}".format(avg_temp, min_temp, max_temp, avg_hum, min_hum, max_hum)
-        hour = datetime.datetime.now().hour
-        if hour < 12:
-            message = "Good Morning"
-        elif 12 <= hour < 18:
-            message = "Good Afternoon"
-        else:
-            message = "Good Evening"
-
-        self.lcd.clear()
-        self.lcd.message(message)
-
-    def update_version(self):
-        message = self.version_msg
-        self.lcd.clear()
-        self.lcd.message(message)
-
-    def update_wheel(self):
-        wheel_data = self.get_wheel_data()
-
-        distance = wheel_data[0] if wheel_data[0] is not None else 0
-        revs = wheel_data[1] if wheel_data[1] is not None else 0
-        moving_time = wheel_data[2] if wheel_data[2] is not None else 0
-        if moving_time > 0:
-            speed = distance / moving_time * 3600
-        else:
-            speed = 0
-
-        td = datetime.timedelta(seconds=moving_time)
-
-        turns_display = "{revs:.0f}t".format(revs=revs)
-        distance_display = "{dist:>{just}.3f}mi".format(dist=distance, just=16-len(turns_display) - 1 - 2)
-        time_display = "{time:,.0f}s".format(time=moving_time)
- #       time_display = str(td)
-        speed_display = "{speed:{just}.2f}mph".format(speed=speed, just=16-len(time_display) - 1 - 2)
-        message = "{0} {1}\n{2}{3}".format(turns_display, distance_display, time_display, speed_display)
-        self.lcd.clear()
-        self.lcd.message(message)
-
-    def update_wx(self):
-        temp_display = "{0}{1}{2}".format(self.sensor_data['temp_f'], chr(223), 'F')
-        humidity_display = "{0:.1f}%".format(self.sensor_data['humidity'])
-        lux_display = "{0} lux".format(self.sensor_data['lux'])
-
-        temp_len = len(temp_display)
-        message = "{0} {1:>{just}}\n{lux:^16}".format(temp_display,humidity_display, just=16-temp_len-1, lux=lux_display)
-
-        self.lcd.clear()
-        self.lcd.message(message)
-
-    def update_time(self):
-        time_now = datetime.datetime.now()
-        display_time = time_now.strftime("%a %m/%d/%Y\n%I:%M %p")
-        message = display_time
-        self.lcd.clear()
-        self.lcd.message(message)
-
-    def get_wheel_data(self):
-        conn = sqlite3.connect('hedgehog.db')
-        c = conn.cursor()
-
-        sql = "select sum(distance),sum(revolutions), sum(moving_time) " \
-              "from wheel_tbl where timestamp > datetime('now', '-24 hours')"
-
-        result = c.execute(sql).fetchone()
-        conn.close()
-        return result
-
-    def get_temp_extremes(self):
-        conn = sqlite3.connect('hedgehog.db')
-        c = conn.cursor()
-
-        sql = "select avg(temp), min(temp), max(temp), avg(humidity), min(humidity), max(humidity) " \
-              "from temp_tbl where timestamp > datetime('now', '-24 hours')"
-
-        result = c.execute(sql).fetchone()
-        conn.close()
-        return result
