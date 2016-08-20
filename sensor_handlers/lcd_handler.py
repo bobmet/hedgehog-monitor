@@ -25,7 +25,6 @@ class DataReportingThread(threading.Thread):
         self.message_list = list()
         self.current_message_num = 0
 
-#        self.timeout_length = 6
         self.loop_sleep = 0.10
 
         self.version_msg = version_msg
@@ -230,9 +229,11 @@ class DataReportingThread(threading.Thread):
 
 
 class DatabaseHandler:
+    """
+    Class to wrap the database creation/queries
+    """
     def __init__(self):
         self.db_name = 'hedgehog.db'
-
 
     def get_data(self, sql):
         try:
