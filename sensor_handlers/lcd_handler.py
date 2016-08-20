@@ -26,7 +26,7 @@ class DataReportingThread(threading.Thread):
         self.current_message_num = 0
 
 #        self.timeout_length = 6
-        self.loop_sleep = 0.001
+        self.loop_sleep = 0.10
 
         self.version_msg = version_msg
         self.lcd.message(self.version_msg)
@@ -334,4 +334,3 @@ class DatabaseHandler:
             conn.close()
         except Exception as ex:
             logger.error("Error inserting data into table:  {0}".format(ex))
-g
