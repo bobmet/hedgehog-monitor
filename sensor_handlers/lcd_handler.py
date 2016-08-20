@@ -267,7 +267,7 @@ class DatabaseHandler:
         return self.get_data(sql)
 
     def get_last_light_data(self):
-        sql = "select lux, timestamp from lux_tbl order by timestamp DESC"
+        sql = "select lux, timestamp from light_tbl order by timestamp DESC"
         data = self.get_data(sql)
         return data
 
