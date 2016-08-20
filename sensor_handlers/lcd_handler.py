@@ -25,8 +25,7 @@ class DataReportingThread(threading.Thread):
         self.message_list = list()
         self.current_message_num = 0
 
-#        self.timeout_length = 6
-        self.loop_sleep = 0.001
+        self.loop_sleep = 0.05
 
         self.version_msg = version_msg
         self.lcd.message(self.version_msg)
@@ -230,9 +229,11 @@ class DataReportingThread(threading.Thread):
 
 
 class DatabaseHandler:
+    """
+    Class to wrap the database creation/queries
+    """
     def __init__(self):
         self.db_name = 'hedgehog.db'
-
 
     def get_data(self, sql):
         try:
@@ -267,7 +268,7 @@ class DatabaseHandler:
         return self.get_data(sql)
 
     def get_last_light_data(self):
-        sql = "select lux, timestamp from lux_tbl order by timestamp DESC"
+        sql = "select lux, timestamp from light_tbl order by timestamp DESC"
         data = self.get_data(sql)
         return data
 
