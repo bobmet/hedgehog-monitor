@@ -25,7 +25,7 @@ class DataReportingThread(threading.Thread):
         self.message_list = list()
         self.current_message_num = 0
 
-        self.loop_sleep = 0.05
+        self.loop_sleep = 0.10
 
         self.version_msg = version_msg
         self.lcd.message(self.version_msg)
