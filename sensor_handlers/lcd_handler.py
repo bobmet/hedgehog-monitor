@@ -19,11 +19,6 @@ class DataReportingThread(threading.Thread):
 
         self.fadeout_time = fadeout_time
 
-        # Initialize some default values
-        self.sensor_data = {"revolutions": 0,
-                            "distance": 0,
-                            "total_revs": 0,
-                            "total_distance": 0}
         self.lcd = lcd
 
         self.backlight_status = False
@@ -82,7 +77,7 @@ class DataReportingThread(threading.Thread):
 
             except Queue.Empty:
                 # The queue.get with a timeout throws a Queue.Empty exception. Just continue if that happens
-                continue
+                pass
 
         logger.info("Thread {0} closing".format(threading.currentThread().name))
 
@@ -97,16 +92,12 @@ class DataReportingThread(threading.Thread):
 
         if data_type == 'temperature':
             if self.current_message_num == self.display_wx:
-                self.update_wx()
+                self.update_environment()
 
         elif data_type == 'light':
             if self.current_message_num == self.display_wx:
-                self.update_wx()
+                self.update_environment()
         elif data_type == 'wheel':
-            self.sensor_data['revolutions'] = data['revolutions']
-            self.sensor_data['distance'] = data['distance']
-            self.sensor_data['total_distance'] += data['distance']
-            self.sensor_data['total_revs'] += data['revolutions']
             if self.current_message_num == self.display_wheel:
                 self.update_wheel()
         elif data_type == 'button':
@@ -135,7 +126,7 @@ class DataReportingThread(threading.Thread):
             if self.current_message_num == self.display_version:
                 self.update_version()
             elif self.current_message_num == self.display_wx:
-                self.update_wx()
+                self.update_environment()
             elif self.current_message_num == self.display_clock:
                 self.update_time()
             elif self.current_message_num == self.display_wheel:
@@ -162,45 +153,60 @@ class DataReportingThread(threading.Thread):
         self.lcd.message(message)
 
     def update_wheel(self):
+        """
+        Retrieves data aon the wheel and displays it
+        :return:
+        """
+
+        # Get the database info - last 24 hours of data
         wheel_data = self.db.get_wheel_data()
+        if wheel_data is not None:
+            distance = wheel_data[0] if wheel_data[0] is not None else 0
+            revs = wheel_data[1] if wheel_data[1] is not None else 0
+            moving_time = wheel_data[2] if wheel_data[2] is not None else 0
 
-        distance = wheel_data[0] if wheel_data[0] is not None else 0
-        revs = wheel_data[1] if wheel_data[1] is not None else 0
-        moving_time = wheel_data[2] if wheel_data[2] is not None else 0
-        if moving_time > 0:
-            speed = distance / moving_time * 3600
+            #  Watch for a divide by zero error - should only happen if we have no data
+            try:
+                speed = distance / moving_time * 3600
+            except ZeroDivisionError:
+                speed = 0
+
+            # Format the display.  We're showing revolutions and distance on one line,
+            # elapsed time and average speed on the second line
+            turns_display = "{revs:.0f}t".format(revs=revs)
+            distance_display = "{dist:>{just}.3f}mi".format(dist=distance, just=16-len(turns_display) - 1 - 2)
+            time_display = "{time:,.0f}s".format(time=moving_time)
+            speed_display = "{speed:{just}.2f}mph".format(speed=speed, just=16-len(time_display) - 1 - 2)
+
+            message = "{0} {1}\n{2}{3}".format(turns_display, distance_display, time_display, speed_display)
         else:
-            speed = 0
+            message = "Not Available"
 
-        td = datetime.timedelta(seconds=moving_time)
-
-        turns_display = "{revs:.0f}t".format(revs=revs)
-        distance_display = "{dist:>{just}.3f}mi".format(dist=distance, just=16-len(turns_display) - 1 - 2)
-        time_display = "{time:,.0f}s".format(time=moving_time)
- #       time_display = str(td)
-        speed_display = "{speed:{just}.2f}mph".format(speed=speed, just=16-len(time_display) - 1 - 2)
-        message = "{0} {1}\n{2}{3}".format(turns_display, distance_display, time_display, speed_display)
         self.lcd.clear()
         self.lcd.message(message)
 
-    def update_wx(self):
+    def update_environment(self):
+        """
 
-        data = self.db.get_last_wx_data()
-        temp_f = data[0]
-        humidity = data[1]
-        data = self.db.get_last_light_data()
-        lux = data[0]
+        :return:
+        """
+        data = self.db.get_environment_data()
+        if data is not None:
+            temp_f = data[0]
+            humidity = data[1]
+            lux = data[2]
 
-        temp_display = "{0}{1}{2}".format(temp_f, chr(223), 'F')
-        humidity_display = "{0:.1f}%".format(humidity)
-        lux_display = "{0} lux".format(lux)
+            temp_display = "{0}{1}{2}".format(temp_f, chr(223), 'F')
+            humidity_display = "{0:.1f}%".format(humidity)
+            lux_display = "{0} lux".format(lux)
 
-        temp_len = len(temp_display)
-        message = "{0} {1:>{just}}\n{lux:^16}".format(temp_display,
-                                                      humidity_display,
-                                                      just=16-temp_len-1,
-                                                      lux=lux_display)
-
+            temp_len = len(temp_display)
+            message = "{0} {1:>{just}}\n{lux:^16}".format(temp_display,
+                                                          humidity_display,
+                                                          just=16-temp_len-1,
+                                                          lux=lux_display)
+        else:
+            message = "Not Available"
         self.lcd.clear()
         self.lcd.message(message)
 
@@ -229,13 +235,29 @@ class DatabaseHandler:
 
 
     def get_data(self, sql):
-        conn = sqlite3.connect(self.db_name)
-        c = conn.cursor()
+        try:
+            conn = sqlite3.connect(self.db_name)
+            c = conn.cursor()
 
-        result = c.execute(sql).fetchone()
-        conn.close()
+            result = c.execute(sql).fetchone()
+            conn.close()
 
-        data = tuple(result)
+            data = tuple(result)
+        except sqlite3.OperationalError as ex:
+            logger.error("Database error retrieving data: {0}".format(ex))
+            data = None
+
+        return data
+
+    def get_environment_data(self):
+        wx = self.get_last_wx_data()
+        lux = self.get_last_light_data()
+
+        if wx is not None and lux is not None:
+            data = (wx[0], wx[1], lux[0])
+        else:
+            data = None
+
         return data
 
     def get_wheel_data(self):
