@@ -22,7 +22,7 @@ from sensor_handlers.lcd_handler import DataReportingThread
 from sensor_handlers.wheel_counter import WheelCounterThread
 import yaml
 
-__version__ = "0.0.20"
+__version__ = "0.0.21"
 
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
