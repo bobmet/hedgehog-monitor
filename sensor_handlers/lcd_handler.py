@@ -5,7 +5,7 @@ import datetime
 import sqlite3
 import os
 
-__version__ = "0.0.6"
+__version__ = "0.0.7"
 
 logger = logging.getLogger('hh')
 
@@ -30,11 +30,13 @@ class DataReportingThread(threading.Thread):
         self.version_msg = version_msg
         self.lcd.message(self.version_msg)
 
-        self.display_version = 0
+        self.display_version = 4
         self.display_wx = 1
         self.display_wheel = 2
         self.display_clock = 3
-        self.display_msg = 4
+        self.display_msg = 0
+        self.last_message = 4
+        self.first_message = 0
         self.timeout_counter = 0
 
         self.db = DatabaseHandler()
@@ -80,7 +82,6 @@ class DataReportingThread(threading.Thread):
 
         logger.info("Thread {0} closing".format(threading.currentThread().name))
 
-
     def handle_update(self, data):
         """
         :param self:
@@ -105,11 +106,6 @@ class DataReportingThread(threading.Thread):
 
         self.db.save_to_database(data)
 
-    def toggle_backlight(self):
-        backlight_set = 0 if self.backlight_status is True else 1
-        self.lcd.set_backlight(backlight_set)
-        self.backlight_status = not self.backlight_status
-
     def update_lcd(self):
 
         if self.backlight_status is False:
@@ -117,8 +113,8 @@ class DataReportingThread(threading.Thread):
             self.lcd.set_backlight(0)
         else:
             self.current_message_num += 1
-            if self.current_message_num > self.display_msg:
-                self.current_message_num = self.display_version
+            if self.current_message_num > self.last_message:
+                self.current_message_num = self.first_message
 
             logger.info("Current screen: {0}".format(self.current_message_num))
 
@@ -137,12 +133,13 @@ class DataReportingThread(threading.Thread):
     def update_message(self):
         hour = datetime.datetime.now().hour
         if hour < 12:
-            message = "Good Morning"
+            greeting = "Good Morning"
         elif 12 <= hour < 18:
-            message = "Good Afternoon"
+            greeting = "Good Afternoon"
         else:
-            message = "Good Evening"
+            greeting = "Good Evening"
 
+        message = "S'more Monitor\n{0}".format(greeting)
         self.lcd.clear()
         self.lcd.message(message)
 
@@ -189,6 +186,8 @@ class DataReportingThread(threading.Thread):
 
         :return:
         """
+
+        # Get the latest environment data from the database
         data = self.db.get_environment_data()
         if data is not None:
             temp_f = data[0]
