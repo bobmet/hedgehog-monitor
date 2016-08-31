@@ -1,9 +1,9 @@
-import threading
 import Queue
-import logging
 import datetime
-import sqlite3
+import logging
 import os
+import threading
+
 from database import DatabaseHandler
 
 __version__ = "0.0.7"
@@ -31,11 +31,11 @@ class DataReportingThread(threading.Thread):
         self.version_msg = version_msg
         self.lcd.message(self.version_msg)
 
-        self.display_version = 4
+        self.display_msg = 0
         self.display_wx = 1
         self.display_wheel = 2
         self.display_clock = 3
-        self.display_msg = 0
+        self.display_version = 4
         self.last_message = 4
         self.first_message = 0
         self.timeout_counter = 0
@@ -48,6 +48,10 @@ class DataReportingThread(threading.Thread):
             self.db.create_database()
 
     def run(self):
+        """
+
+        :return:
+        """
         last_datetime = None
         while self.run_event.is_set():
             try:
@@ -109,7 +113,10 @@ class DataReportingThread(threading.Thread):
         self.db.save_to_database(data)
 
     def update_lcd(self):
+        """
 
+        :return:
+        """
         if self.backlight_status is False:
             self.backlight_status = True
             self.lcd.set_backlight(0)
@@ -217,15 +224,5 @@ class DataReportingThread(threading.Thread):
         self.lcd.clear()
         self.lcd.message(message)
 
-    def get_wheel_data(self):
-        conn = sqlite3.connect('hedgehog.db')
-        c = conn.cursor()
-
-        sql = "select sum(distance),sum(revolutions), sum(moving_time) " \
-              "from wheel_tbl where timestamp > datetime('now', '-24 hours')"
-
-        result = c.execute(sql).fetchone()
-        conn.close()
-        return result
 
 

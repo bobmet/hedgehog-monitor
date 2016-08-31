@@ -7,10 +7,12 @@ Created on Thu Jul 14 23:20:03 2016
 
 import datetime
 import logging
-import threading
-from multiprocessing import Process, Queue
 import signal
+import threading
+from multiprocessing import Queue
+
 import RPi.GPIO as GPIO
+import yaml
 
 import dht22
 import sensor_handlers
@@ -20,9 +22,8 @@ from sensor_handlers.button_handler import ButtonHandlerThread
 from sensor_handlers.data_collection_thread import DataCollectionThread
 from sensor_handlers.lcd_handler import DataReportingThread
 from sensor_handlers.wheel_counter import WheelCounterThread
-import yaml
 
-__version__ = "0.0.21"
+__version__ = "0.0.23"
 
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -70,8 +71,6 @@ class MainLoop:
         self.queue = Queue()
         self.lcd_queue = Queue()
         self.lcd = LCDDisplay()
-
-        self.version_msg = "S'more Monitor\nv{0}".format(__version__)
 
         return
 
@@ -126,7 +125,7 @@ class MainLoop:
                                           self.config['timeouts']['wheel_inactivity_timer'],
                                           self.run_event,
                                           self.queue)
-        thread_lcd = DataReportingThread(self.run_event, self.lcd_queue, self.lcd, self.version_msg,
+        thread_lcd = DataReportingThread(self.run_event, self.lcd_queue, self.lcd, __version__,
                                          self.config['timeouts']['lcd_fadeout_time'])
         thread_button = ButtonHandlerThread(6, self.run_event, self.queue)
 
@@ -145,7 +144,7 @@ class MainLoop:
                 # responsiveness on the loop (e.g. for CTRL+C shutdown) and will also act as the loop
                 # delay since we're basically in a busy-wait
                 data = self.queue.get(True, 0.001)
-#                logger.info("{0}: {1}".format(threading.currentThread().name, data))
+                logger.info("{0}: {1}".format(threading.currentThread().name, data))
 
                 self.lcd_queue.put(data)
 
