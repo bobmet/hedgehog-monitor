@@ -22,45 +22,17 @@ from sensor_handlers.button_handler import ButtonHandlerThread
 from sensor_handlers.data_collection_thread import DataCollectionThread
 from sensor_handlers.lcd_handler import DataReportingThread
 from sensor_handlers.wheel_counter import WheelCounterThread
+from sensor_handlers.data_collection_thread import TemperatureThread, LuxThread
 
-__version__ = "0.0.23"
+__version__ = "0.0.24"
 
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     level=logging.INFO)
 logger = logging.getLogger('hh')
 
-# --------- User Settings ---------
-# Initial State settings
-BUCKET_NAME = ":computer: DHT22 Test" 
-BUCKET_KEY = "pi0709"
-ACCESS_KEY = "VXwJYOQYjG20KhC37EaJgGBdiyh2Ob4f"
-# Set the time between checks
-MINUTES_BETWEEN_READS = 1
-METRIC_UNITS = False
-# ---------------------------------
 CONFIG_FILENAME = "hhconfig.yml"
 
-class TemperatureThread(DataCollectionThread):
-    def get_data(self):
-        humidity, temp = self.sensor_module.get_data()
-
-        data = {'data_type': 'temperature',
-                'temp_c': round(float(temp), 2),
-                'temp_f': round(float(temp) * 1.8 + 32, 2),
-                'humidity': round(float(humidity), 2),
-                'datetime': datetime.datetime.now()}
-
-        return data
-
-
-class LuxThread(DataCollectionThread):
-    def get_data(self):
-        lux = self.sensor_module.get_data()
-        data = {'data_type': 'light',
-                'lux': lux,
-                'datetime': datetime.datetime.now()}
-        return data
 
 
 class MainLoop:
@@ -126,7 +98,8 @@ class MainLoop:
                                           self.run_event,
                                           self.queue)
         thread_lcd = DataReportingThread(self.run_event, self.lcd_queue, self.lcd, __version__,
-                                         self.config['timeouts']['lcd_fadeout_time'])
+                                         self.config['timeouts']['lcd_fadeout_time'],
+                                         self.config['database']['filename'])
         thread_button = ButtonHandlerThread(6, self.run_event, self.queue)
 
         signal.signal(signal.SIGINT, original_sigint_handler)

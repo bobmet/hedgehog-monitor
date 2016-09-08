@@ -12,7 +12,7 @@ logger = logging.getLogger('hh')
 
 
 class DataReportingThread(threading.Thread):
-    def __init__(self, run_event, queue, lcd, version_msg, fadeout_time):
+    def __init__(self, run_event, queue, lcd, version_msg, fadeout_time, db_name):
         threading.Thread.__init__(self)
 
         self.run_event = run_event
@@ -27,8 +27,11 @@ class DataReportingThread(threading.Thread):
         self.current_message_num = 0
 
         self.loop_sleep = 0.10
+        self.timeout_counter = 0
 
         self.version_msg = version_msg
+
+        # LCD messages
         self.lcd.message(self.version_msg)
 
         self.display_msg = 0
@@ -38,9 +41,7 @@ class DataReportingThread(threading.Thread):
         self.display_version = 4
         self.last_message = 4
         self.first_message = 0
-        self.timeout_counter = 0
 
-        db_name = 'hedgehog.db'
         self.db = DatabaseHandler(db_name)
 
         if os.path.exists(db_name) is False:

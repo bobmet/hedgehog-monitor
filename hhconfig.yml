@@ -14,3 +14,15 @@ timeouts:
 
 wheel_info:
   circumference:  13
+
+database:
+  filename: hedgehog.db
+
+
+initial_state:
+# --------- User Settings ---------
+# Initial State settings
+  BUCKET_NAME: ":computer: DHT22 Test"
+  BUCKET_KEY: pi0709
+  ACCESS_KEY: VXwJYOQYjG20KhC37EaJgGBdiyh2Ob4f
+
