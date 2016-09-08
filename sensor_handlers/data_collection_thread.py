@@ -3,7 +3,7 @@ import multiprocessing
 import timeit
 import time
 import logging
-
+import datetime
 logger = logging.getLogger('hh')
 
 
@@ -47,3 +47,25 @@ class DataCollectionThread(multiprocessing.Process):
 
     def report(self, data_points):
         self.queue.put(data_points)
+
+
+class TemperatureThread(DataCollectionThread):
+    def get_data(self):
+        humidity, temp = self.sensor_module.get_data()
+
+        data = {'data_type': 'temperature',
+                'temp_c': round(float(temp), 2),
+                'temp_f': round(float(temp) * 1.8 + 32, 2),
+                'humidity': round(float(humidity), 2),
+                'datetime': datetime.datetime.now()}
+
+        return data
+
+
+class LuxThread(DataCollectionThread):
+    def get_data(self):
+        lux = self.sensor_module.get_data()
+        data = {'data_type': 'light',
+                'lux': lux,
+                'datetime': datetime.datetime.now()}
+        return data
