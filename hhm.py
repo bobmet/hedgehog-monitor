@@ -5,7 +5,6 @@ Created on Thu Jul 14 23:20:03 2016
 @author: pi
 """
 
-import datetime
 import logging
 import signal
 import threading
@@ -19,12 +18,11 @@ import sensor_handlers
 import tsl_sensor
 from lcd_display import LCDDisplay
 from sensor_handlers.button_handler import ButtonHandlerThread
-from sensor_handlers.data_collection_thread import DataCollectionThread
+from sensor_handlers.data_collection_thread import TemperatureThread, LuxThread
 from sensor_handlers.lcd_handler import DataReportingThread
 from sensor_handlers.wheel_counter import WheelCounterThread
-from sensor_handlers.data_collection_thread import TemperatureThread, LuxThread
 
-__version__ = "0.0.24"
+__version__ = "0.0.25"
 
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -41,7 +39,7 @@ class MainLoop:
         self.gpio_setup()
         self.run_event = threading.Event()
         self.queue = Queue()
-        self.lcd_queue = Queue()
+        self.reporting_queue = Queue()
         self.lcd = LCDDisplay()
 
         return
@@ -89,6 +87,7 @@ class MainLoop:
         # TODO:
         original_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
 
+        # Subprocess handlers
         thread_temp = TemperatureThread(self.config['timeouts']['wx_timeout'], dht, self.run_event, self.queue)
         thread_lux = LuxThread(self.config['timeouts']['lux_timeout'], tsl, self.run_event, self.queue)
         thread_wheel = WheelCounterThread(self.config['pins']['wheel_sensor_pin'],
@@ -97,7 +96,7 @@ class MainLoop:
                                           self.config['timeouts']['wheel_inactivity_timer'],
                                           self.run_event,
                                           self.queue)
-        thread_lcd = DataReportingThread(self.run_event, self.lcd_queue, self.lcd, __version__,
+        thread_lcd = DataReportingThread(self.run_event, self.reporting_queue, self.lcd, __version__,
                                          self.config['timeouts']['lcd_fadeout_time'],
                                          self.config['database']['filename'])
         thread_button = ButtonHandlerThread(6, self.run_event, self.queue)
@@ -117,9 +116,10 @@ class MainLoop:
                 # responsiveness on the loop (e.g. for CTRL+C shutdown) and will also act as the loop
                 # delay since we're basically in a busy-wait
                 data = self.queue.get(True, 0.001)
-                logger.info("{0}: {1}".format(threading.currentThread().name, data))
+#                logger.info("{0}: {1}".format(threading.currentThread().name, data))
 
-                self.lcd_queue.put(data)
+                # Get the data over to the reporting thread
+                self.reporting_queue.put(data)
 
             except KeyboardInterrupt:
                 logger.info("Keyboard Stop, terminating worker processes")
@@ -134,11 +134,7 @@ class MainLoop:
                 self.lcd.clear()
                 logger.info("Threads shutdown")
                 break
-#            except Queue.Empty:
-                # The queue.get with a timeout throws a Queue.Empty exception. Just continue if that happens
-#                continue
             except Exception as ex:
-#                logger.error(">{0}< exception caught".format(ex))
                 pass
 
 logger.info("Starting Hedgehog Monitor {0}, sensor_handler: v{1}".format(__version__, sensor_handlers.__version__))

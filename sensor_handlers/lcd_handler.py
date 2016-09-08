@@ -50,7 +50,8 @@ class DataReportingThread(threading.Thread):
 
     def run(self):
         """
-
+        Run handler for the data reporting subprocess.  This checks for data coming over a queue; if there is any,
+        it'll pull the data, save it to the database, and update the LCD.
         :return:
         """
         last_datetime = None
