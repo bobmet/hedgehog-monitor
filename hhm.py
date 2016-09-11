@@ -22,7 +22,7 @@ from sensor_handlers.data_collection_thread import TemperatureThread, LuxThread
 from sensor_handlers.lcd_handler import DataReportingThread
 from sensor_handlers.wheel_counter import WheelCounterThread
 
-__version__ = "0.0.25"
+__version__ = "0.0.26"
 
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -94,6 +94,7 @@ class MainLoop:
                                           self.config['pins']['wheel_led_pin'],
                                           self.config['timeouts']['wheel_loop_timer'],
                                           self.config['timeouts']['wheel_inactivity_timer'],
+                                          self.config['wheel_info']['circumference'],
                                           self.run_event,
                                           self.queue)
         thread_lcd = DataReportingThread(self.run_event, self.reporting_queue, self.lcd, __version__,

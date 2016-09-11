@@ -13,7 +13,7 @@ timeouts:
   lcd_fadeout_time: 10
 
 wheel_info:
-  circumference:  13
+  circumference:  31.9291
 
 database:
   filename: hedgehog.db

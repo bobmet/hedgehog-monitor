@@ -11,7 +11,7 @@ logger = logging.getLogger('hh')
 
 
 class WheelCounterThread(multiprocessing.Process):
-    def __init__(self, sensor_pin, led_pin, loop_time, inactivity_timeout, run_event, queue):
+    def __init__(self, sensor_pin, led_pin, loop_time, inactivity_timeout, wheel_circumference,run_event, queue):
         multiprocessing.Process.__init__(self)
 
         GPIO.setmode(GPIO.BCM)
@@ -23,7 +23,7 @@ class WheelCounterThread(multiprocessing.Process):
         self.inactivity_timeout = inactivity_timeout
         GPIO.setup(self.sensor_pin, GPIO.IN)
         GPIO.setup(self.led_pin, GPIO.OUT)
-
+        self.circumference = wheel_circumference * 0.0000157828283
         signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     def run(self):
@@ -33,7 +33,8 @@ class WheelCounterThread(multiprocessing.Process):
         """
         last_time = None
         diameter = 13
-        circumference = diameter * math.pi * 0.0000157828283
+   #         circumference = diameter * math.pi * 0.0000157828283
+        circumference = self.circumference
         period_counter = 0
         total_period = self.loop_time * 1000
         timeout_value = 100  # milliseconds
