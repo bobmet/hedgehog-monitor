@@ -52,14 +52,14 @@ class DataCollectionThread(multiprocessing.Process):
 class TemperatureThread(DataCollectionThread):
     def get_data(self):
         humidity, temp = self.sensor_module.get_data()
+        if temp is not None:
+            data = {'data_type': 'temperature',
+                    'temp_c': round(float(temp), 2),
+                    'temp_f': round(float(temp) * 1.8 + 32, 2),
+                    'humidity': round(float(humidity), 2),
+                    'datetime': datetime.datetime.now()}
 
-        data = {'data_type': 'temperature',
-                'temp_c': round(float(temp), 2),
-                'temp_f': round(float(temp) * 1.8 + 32, 2),
-                'humidity': round(float(humidity), 2),
-                'datetime': datetime.datetime.now()}
-
-        return data
+            return data
 
 
 class LuxThread(DataCollectionThread):
