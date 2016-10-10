@@ -4,4 +4,7 @@ btest2.py
 hedgehog.db
 db_tester.py
 system_check.py
+testdht.py
+tester.py
+testled.py
 
