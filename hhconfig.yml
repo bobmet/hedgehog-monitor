@@ -1,9 +1,10 @@
 
 pins:
-  dht_led_pin:  22
-  dht_data_pin: 4
-  wheel_sensor_pin: 18
-  wheel_led_pin:  21
+  dht_led_pin:  4
+  dht_data_pin: 19
+  wheel_sensor_pin: 21
+  wheel_led_pin:  13
+  button_pin:  26
 
 timeouts:
   wheel_loop_timer: 60

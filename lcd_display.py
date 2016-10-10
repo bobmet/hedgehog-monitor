@@ -38,7 +38,6 @@ class LCDDisplay(LCD.Adafruit_CharLCD):
 
 
 if __name__ == '__main__':
-    print "Starting"
     lcd = LCDDisplay()
 
     lcd.set_backlight(0)

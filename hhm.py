@@ -22,7 +22,7 @@ from sensor_handlers.data_collection_thread import TemperatureThread, LuxThread
 from sensor_handlers.lcd_handler import DataReportingThread
 from sensor_handlers.wheel_counter import WheelCounterThread
 
-__version__ = "0.0.26"
+__version__ = "0.0.28"
 
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -30,8 +30,6 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger('hh')
 
 CONFIG_FILENAME = "hhconfig.yml"
-
-
 
 class MainLoop:
     def __init__(self):
@@ -63,6 +61,7 @@ class MainLoop:
         # Use the BCM numbering for the GPIO pins
         GPIO.setmode(GPIO.BCM)
         GPIO.setwarnings(False)
+        logger.info("GPIO Setup")
 
     def gpio_cleanup(self):
         """
@@ -78,9 +77,13 @@ class MainLoop:
         """
         self.run_event.set()
 
-        dht_led_pin = self.config['pins']['dht_led_pin']
+        if 'dht_led_pin' in self.config['pins']:
+            dht_led_pin = self.config['pins']['dht_led_pin']
+            GPIO.setup(dht_led_pin, GPIO.OUT)
+        else:
+            dht_led_pin = None
         dht_data_pin = self.config['pins']['dht_data_pin']
-        GPIO.setup(dht_led_pin, GPIO.OUT)
+        button_pin = self.config['pins']['button_pin']
         dht = dht22.DHT22(data_gpio_pin=dht_data_pin, led_gpio_pin=dht_led_pin)
         tsl = tsl_sensor.TSLSensor()
 
@@ -100,7 +103,7 @@ class MainLoop:
         thread_lcd = DataReportingThread(self.run_event, self.reporting_queue, self.lcd, __version__,
                                          self.config['timeouts']['lcd_fadeout_time'],
                                          self.config['database']['filename'])
-        thread_button = ButtonHandlerThread(6, self.run_event, self.queue)
+        thread_button = ButtonHandlerThread(button_pin, self.run_event, self.queue)
 
         signal.signal(signal.SIGINT, original_sigint_handler)
 
@@ -117,7 +120,7 @@ class MainLoop:
                 # responsiveness on the loop (e.g. for CTRL+C shutdown) and will also act as the loop
                 # delay since we're basically in a busy-wait
                 data = self.queue.get(True, 0.001)
-#                logger.info("{0}: {1}".format(threading.currentThread().name, data))
+                logger.info("{0}: {1}".format(threading.currentThread().name, data))
 
                 # Get the data over to the reporting thread
                 self.reporting_queue.put(data)
